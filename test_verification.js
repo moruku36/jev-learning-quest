@@ -138,6 +138,83 @@ async function runVerification() {
   assert.notStrictEqual(recAfter.data.quest.historyId, missId, '克服済みは再出題されない');
   console.log('✔ 克服済みの誤答は復習リストと推薦から外れる');
 
+  console.log('\n=== [5-b] 一問一答（過去問5年分）===');
+  const { data: content } = await get('/api/content');
+  assert.strictEqual(content.quiz.stats.ap.total, 800, '応用情報 午前 80問×10回');
+  assert.strictEqual(content.quiz.stats.sc.total, 250, '支援士 午前II 25問×10回');
+  assert.strictEqual(content.quiz.sessions.length, 10);
+  assert.strictEqual(content.quiz.sessions[0].label, '令和7年秋期', '新しい回が先頭');
+  console.log('✔ 応用情報 800問 + 支援士 250問が同梱されている');
+
+  const recQuiz = await post('/api/quest/recommend', { minutes: 10, category: 'sc', goal: 'balance' });
+  const quizCand = recQuiz.data.allCandidates.find(c => c.id === 'quiz_sc');
+  assert.ok(quizCand, '支援士の一問一答が候補に入る');
+  assert.deepStrictEqual(quizCand.quiz, { exam: 'sc', mode: 'mix', count: 10 }, '10分なら10問');
+  assert.ok(recQuiz.data.allCandidates.some(c => c.id === 'quiz_ap'));
+  assert.ok(!recQuiz.data.allCandidates.some(c => c.type === 'レポートを読む'), '支援士を選んだときはAIレポートを出さない');
+  console.log('✔ 一問一答がクエスト候補になる（出題数は使える時間から決まる）');
+
+  const { data: deck } = await get('/api/quiz/deck?exam=sc&session=07_aki&count=5');
+  assert.strictEqual(deck.cards.length, 5);
+  assert.ok(deck.cards.every(c => c.exam === 'sc' && c.session === '07_aki' && c.question && c.answer));
+  assert.match(deck.cards[0].url, /^https:\/\/www\.sc-siken\.com\/kakomon\/07_aki\/am2_\d+\.html$/);
+  const { data: apDeck } = await get('/api/quiz/deck?exam=ap&count=3');
+  assert.match(apDeck.cards[0].url, /^https:\/\/www\.ap-siken\.com\/kakomon\/\d{2}_(haru|aki)\/q\d+\.html$/);
+  console.log('✔ 試験・回を指定して出題でき、元の過去問ページへのリンクが付く');
+
+  const answers = deck.cards.map((c, i) => ({ id: c.id, correct: i >= 2 }));
+  const quizRes = await post('/api/quiz/answers', { answers, title: '一問一答テスト', decisionSource: 'rule' });
+  assert.strictEqual(quizRes.status, 201);
+  assert.strictEqual(quizRes.data.summary, '5問中3問正解（正答率60%）');
+  assert.deepStrictEqual(quizRes.data.wrongCards.map(c => c.id), [deck.cards[0].id, deck.cards[1].id]);
+  assert.strictEqual(quizRes.data.history.kind, 'quiz');
+  assert.strictEqual(quizRes.data.stats.sc.studied, 5);
+  assert.strictEqual((await post('/api/quiz/answers', { answers: [] })).status, 400);
+  assert.strictEqual((await post('/api/quiz/answers', { answers: [{ id: 'no-such-card', correct: true }] })).status, 400);
+  console.log('✔ 結果を保存するとカードごとの進捗と学習記録が残る / 不正な入力は400');
+
+  const recAfterQuiz = await post('/api/quest/recommend', { minutes: 20, category: 'sc', goal: 'weakness' });
+  assert.ok(!recAfterQuiz.data.allCandidates.some(c => c.historyId === quizRes.data.history.id), '一問一答の記録は記述の再挑戦にしない');
+  const newDeck = await get('/api/quiz/deck?exam=sc&session=07_aki&mode=new&count=30');
+  assert.strictEqual(newDeck.data.cards.length, 20, '解いた5問は「新しい問題」から外れる');
+
+  // 間違えた問題の復習期限を過去にすると、復習として先に出る
+  const quizStore = JSON.parse(fs.readFileSync(storeFile, 'utf8'));
+  for (const c of deck.cards.slice(0, 2)) quizStore.quizProgress[c.id].due = new Date(Date.now() - 1000).toISOString();
+  fs.writeFileSync(storeFile, JSON.stringify(quizStore));
+  const reviewDeck = await get('/api/quiz/deck?mode=review&count=10');
+  assert.deepStrictEqual(reviewDeck.data.cards.map(c => c.id).sort(), [deck.cards[0].id, deck.cards[1].id].sort());
+  const recQuizReview = await post('/api/quest/recommend', { minutes: 20, category: 'sc', goal: 'balance' });
+  assert.ok(recQuizReview.data.allCandidates.some(c => c.id === 'quiz_review'), '復習期限が来たら復習の一問一答が候補に入る');
+  const { data: histWithQuiz } = await get('/api/history');
+  assert.strictEqual(histWithQuiz.quizStats.wrongDue, 2);
+  console.log('✔ 間違えた問題は翌日以降に復習として優先して出題される');
+
+  console.log('\n=== [5-c] AI レポート・論文 ===');
+  assert.strictEqual(content.readings.length, 36);
+  assert.ok(content.readings.every(r => /^https:\/\//.test(r.url) && r.org && r.focus && r.task));
+  const recAi = await post('/api/quest/recommend', { minutes: 20, category: 'ai', goal: 'input' });
+  const readingCands = recAi.data.allCandidates.filter(c => c.type === 'レポートを読む');
+  assert.strictEqual(readingCands.length, 3, '未読のレポートを3件まで提案');
+  assert.strictEqual(recAi.data.quest.type, 'レポートを読む', '「サクッと情報収集」ではレポートも選ばれる');
+  const firstReading = readingCands[0];
+  await post('/api/history', {
+    itemId: firstReading.itemId, category: 'ai', questType: 'レポートを読む',
+    title: firstReading.title, userAnswer: '要点メモ', isCorrect: true
+  });
+  const recAi2 = await post('/api/quest/recommend', { minutes: 20, category: 'ai', goal: 'input' });
+  assert.ok(!recAi2.data.allCandidates.some(c => c.id === firstReading.id), '読了したレポートは提案しない');
+  const { data: content2 } = await get('/api/content');
+  assert.strictEqual(content2.readings.find(r => r.itemId === firstReading.itemId).done, true);
+  console.log('✔ AI 大手のレポートが候補になり、読了すると次の未読に進む');
+
+  const { data: fullBackup } = await get('/api/backup');
+  assert.ok(fullBackup.quizProgress && Object.keys(fullBackup.quizProgress).length === 5);
+  await post('/api/backup', fullBackup);
+  const { data: content3 } = await get('/api/content');
+  assert.strictEqual(content3.quiz.stats.sc.studied, 5, 'バックアップから一問一答の進捗も復元される');
+  console.log('✔ 一問一答の進捗もバックアップ・復元される');
+
   console.log('\n=== [6] Jev APIキーの保存・マスク・削除 ===');
   const badTest = await post('/api/settings/test-jev', { apiKey: 'jev_wrong_key_000000' });
   assert.strictEqual(badTest.data.success, false);
