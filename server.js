@@ -398,10 +398,17 @@ async function recommendQuestWithJev({ store, category, minutes, goal }) {
     choiceCriteria[c.id] = `[${c.type}][${c.category}] ${c.title} (所要:${c.recommendedMinutes}分) - 狙い: ${c.reason}`;
   });
 
+  const goalLabel = {
+    balance: 'おまかせ（弱点があれば克服を優先）',
+    weakness: '弱点をつぶしたい（誤答の再挑戦を最優先）',
+    exercise: 'じっくり演習したい（過去問の答案作成を優先）',
+    input: 'サクッと情報収集したい（技術キャッチアップを優先）'
+  }[goal] || 'おまかせ';
+
   const statePrompt = `ユーザーの学習状態:
 - 選択分野: ${category}
 - 利用可能時間: ${minutes}分
-- 学習目的/気分: ${goal || 'バランス学習'}
+- 今日の気分・目的: ${goalLabel}
 - 登録学習項目数: ${store.items.length}件
 - 過去の演習履歴数: ${store.history.length}件
 - 未克服の誤答数: ${store.history.filter(h => !h.isCorrect && !h.resolved).length}件`;
@@ -411,18 +418,17 @@ async function recommendQuestWithJev({ store, category, minutes, goal }) {
     questions: {
       next_quest: {
         type: 'choice',
-        instructions: `利用可能時間（${minutes}分）と学習状態に最も適した今日の学習クエストを1つ選んでください。復習すべき弱点がある場合は弱点克服を優先してください。`,
+        instructions: `利用可能時間（${minutes}分）と「今日の気分・目的」に最も適した学習クエストを1つ選んでください。気分・目的が明示されている場合はそれを最優先し、おまかせの場合は復習すべき弱点の克服を優先してください。`,
         criteria: choiceCriteria
       }
     }
   });
 
-  if (jevRes.success && jevRes.answers?.next_quest?.choice) {
-    const chosenId = jevRes.answers.next_quest.choice;
-    const selected = candidates.find(c => c.id === chosenId) || candidates[0];
+  const chosenId = jevRes.success ? jevRes.answers?.next_quest?.choice : undefined;
+  const selected = chosenId !== undefined ? candidates.find(c => c.id === chosenId) : undefined;
+  if (selected) {
     const confidence = jevRes.answers.next_quest.confidence || 0;
 
-    // confidenceが極端に低い場合はルールベースの判断と比較して補正
     return {
       quest: selected,
       allCandidates: candidates,
@@ -439,9 +445,9 @@ async function recommendQuestWithJev({ store, category, minutes, goal }) {
     quest: fallbackResult.selected,
     allCandidates: candidates,
     decisionSource: 'rule_fallback',
-    decisionNote: `Jev に接続できなかったため、アプリ内ルールで提案しました。(${jevRes.reason || 'ERR'})`,
+    decisionNote: `Jev に接続できなかったため、アプリ内ルールで提案しました。(${jevRes.reason || 'UNKNOWN_CHOICE'})`,
     jevStatus: 'FAILED',
-    jevError: jevRes.reason
+    jevError: jevRes.reason || 'UNKNOWN_CHOICE'
   };
 }
 
@@ -487,9 +493,18 @@ async function evaluateResultWithJev({ resultData }) {
   if (jevRes.success && jevRes.answers) {
     const scoreAns = jevRes.answers.understanding_score;
     const noulAns = jevRes.answers.needs_review;
+    // score は 0〜3 の連続値（criteria の添字）→ 画面表示用の 1〜4 に変換
+    const understandingScore = typeof scoreAns?.score === 'number'
+      ? Math.min(4, Math.max(1, Math.round(scoreAns.score) + 1))
+      : 2;
+    // noul は「はい」の確率 (0〜1)。0.5 以上で復習が必要と判断する
+    const noul = noulAns?.noul;
+    const needsReview = typeof noul === 'number' ? noul >= 0.5
+      : typeof noul === 'boolean' ? noul
+      : !resultData.isCorrect;
     return {
-      understandingScore: scoreAns?.score !== undefined ? Math.round(scoreAns.score) + 1 : 2,
-      needsReview: noulAns?.noul !== undefined ? Boolean(noulAns.noul) : !resultData.isCorrect,
+      understandingScore,
+      needsReview,
       decisionSource: 'jev'
     };
   }

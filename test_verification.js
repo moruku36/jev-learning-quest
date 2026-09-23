@@ -28,8 +28,9 @@ const mockJev = http.createServer((req, res) => {
     const answers = {};
     for (const [name, q] of Object.entries(questions)) {
       if (q.type === 'choice') answers[name] = { choice: Object.keys(q.criteria)[0], confidence: 0.9 };
-      if (q.type === 'score') answers[name] = { score: 2 };
-      if (q.type === 'noul') answers[name] = { noul: true };
+      // 実際の Jev と同じ形式: score は 0〜3 の連続値、noul は「はい」の確率
+      if (q.type === 'score') answers[name] = { type: 'score', score: 2.67, confidence: 0.67 };
+      if (q.type === 'noul') answers[name] = { type: 'noul', noul: 0.44 };
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ answers }));
@@ -161,6 +162,8 @@ async function runVerification() {
   assert.strictEqual(recJev.data.decisionSource, 'jev');
   const evalJev = await post('/api/history', { category: 'ai', title: 'Jev評価テスト', userAnswer: 'x', isCorrect: true });
   assert.strictEqual(evalJev.data.evaluation.decisionSource, 'jev');
+  assert.strictEqual(evalJev.data.evaluation.understandingScore, 4, 'score 2.67 は 4段階の4');
+  assert.strictEqual(evalJev.data.evaluation.needsReview, false, 'noul 0.44 (<0.5) は復習不要');
   console.log('✔ キー保存後はクエスト選定と評価に Jev が使われる');
 
   const { data: backup } = await get('/api/backup');
