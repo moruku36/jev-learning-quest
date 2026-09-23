@@ -3,3 +3,6 @@ node_modules/
 *.tmp
 .DS_Store
 Thumbs.db
+
+# Jev APIキー（画面から保存したもの）は絶対にコミットしない
+data/config.json

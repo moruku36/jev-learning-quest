@@ -2,10 +2,17 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 
+const APP_NAME = 'Jev 学習クエスト';
+const APP_VERSION = '1.2.0';
 const PORT = process.env.PORT || 3000;
-const DATA_DIR = path.join(__dirname, 'data');
+// 既定ではこのPCからのみアクセス可能（APIキーを扱うため）
+const HOST = process.env.HOST || '127.0.0.1';
+const DATA_DIR = process.env.LQ_DATA_DIR ? path.resolve(process.env.LQ_DATA_DIR) : path.join(__dirname, 'data');
 const DATA_FILE = path.join(DATA_DIR, 'store.json');
+const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const PUBLIC_DIR = path.join(__dirname, 'public');
+const JEV_ENDPOINT = process.env.JEV_API_URL || 'https://api.typesafe.ai/v1/systemone';
+const JEV_TIMEOUT_MS = 8000;
 
 // --- サンプルデータ定義（架空と明記） ---
 const INITIAL_DATA = {
@@ -154,23 +161,57 @@ function saveStore(data) {
   }
 }
 
+// --- Jev APIキー管理 ---
+// 優先順位: 環境変数 JEV_API_KEY > 画面から保存したキー (data/config.json)
+// キーはサーバー側にのみ保持し、ブラウザにはマスク済みの値しか返さない。
+function loadConfig() {
+  try {
+    if (!fs.existsSync(CONFIG_FILE)) return {};
+    return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')) || {};
+  } catch (err) {
+    console.error('Failed to load config:', err.message);
+    return {};
+  }
+}
+
+function saveConfig(config) {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+  const tmpFile = `${CONFIG_FILE}.tmp`;
+  fs.writeFileSync(tmpFile, JSON.stringify(config, null, 2), { encoding: 'utf8', mode: 0o600 });
+  fs.renameSync(tmpFile, CONFIG_FILE);
+}
+
+function getJevKeyInfo() {
+  const envKey = (process.env.JEV_API_KEY || '').trim();
+  if (envKey) return { key: envKey, source: 'env' };
+  const savedKey = (loadConfig().jevApiKey || '').trim();
+  if (savedKey) return { key: savedKey, source: 'saved' };
+  return { key: '', source: 'none' };
+}
+
+function maskKey(key) {
+  if (!key) return '';
+  return key.length <= 8 ? '••••' : `${key.slice(0, 4)}••••${key.slice(-4)}`;
+}
+
 // --- Jev API クライアント (文章生成を行わず判断のみ利用) ---
-async function callJevSystemOne({ state, questions }) {
-  const apiKey = process.env.JEV_API_KEY;
-  if (!apiKey || apiKey.trim() === '') {
+async function callJevSystemOne({ state, questions, apiKey }) {
+  const key = (apiKey || getJevKeyInfo().key).trim();
+  if (!key) {
     return { success: false, reason: 'KEY_NOT_CONFIGURED' };
   }
 
-  const endpoint = 'https://api.typesafe.ai/v1/systemone';
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 4000);
+  const timeoutId = setTimeout(() => controller.abort(), JEV_TIMEOUT_MS);
 
   try {
-    const res = await fetch(endpoint, {
+    const res = await fetch(JEV_ENDPOINT, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey.trim()}`
+        'Authorization': `Bearer ${key}`
       },
       body: JSON.stringify({
         model: 'jev-latest',
@@ -183,7 +224,7 @@ async function callJevSystemOne({ state, questions }) {
 
     if (!res.ok) {
       const errText = await res.text().catch(() => '');
-      return { success: false, reason: `HTTP_${res.status}`, detail: errText.slice(0, 100) };
+      return { success: false, reason: `HTTP_${res.status}`, httpStatus: res.status, detail: errText.slice(0, 150) };
     }
 
     const data = await res.json();
@@ -205,7 +246,7 @@ function generateQuestCandidates({ store, category, minutes, goal }) {
 
   // 1. 再挑戦待ち (誤答かつ復習期限到来または弱点)
   const pendingReviews = store.history.filter(h => {
-    if (h.isCorrect) return false;
+    if (h.isCorrect || h.resolved) return false;
     if (category !== 'all' && h.category !== category) return false;
     if (!h.nextReviewDate) return true;
     return new Date(h.nextReviewDate) <= now;
@@ -305,31 +346,40 @@ function generateQuestCandidates({ store, category, minutes, goal }) {
 
 // ルールベースによる最適なクエスト選択
 function selectQuestByRule(candidates, { minutes, goal, category }) {
-  // 1. 再挑戦待ちが最優先
+  const findExercise = () => candidates.find(c => c.type === '過去問を解く');
+  const findInput = () => candidates.find(c => c.type === '短く説明する' || c.type === '更新を読む' || c.type === '実務への影響を整理する');
+
+  // 1. 気分で明示された目的を優先する
+  if (goal === 'exercise' && findExercise()) {
+    return { selected: findExercise(), reasonDetail: '「じっくり演習」が選ばれたため、過去問の答案作成を提案しました。' };
+  }
+  if (goal === 'input' && findInput()) {
+    return { selected: findInput(), reasonDetail: '「サクッと情報収集」が選ばれたため、技術キャッチアップを提案しました。' };
+  }
+
+  // 2. 再挑戦待ちがあれば最優先（おまかせ / 弱点をつぶす）
   const reviewCand = candidates.find(c => c.type === '誤答を直す');
-  if (reviewCand && (goal === 'weakness' || goal === 'review' || !goal)) {
-    return { selected: reviewCand, reasonDetail: '復習期限が到来した誤答・弱点項目があるため最優先で提案しました。' };
+  if (reviewCand) {
+    return { selected: reviewCand, reasonDetail: '復習期限が来た誤答があるため、最優先で提案しました。' };
   }
 
-  // 2. 時間が十分にある（30分以上）かつ演習目的
-  if (minutes >= 30 || goal === 'exercise') {
-    const exerciseCand = candidates.find(c => c.type === '過去問を解く') || candidates[0];
-    return { selected: exerciseCand, reasonDetail: `利用可能時間（${minutes}分）を活かして答案記述演習を進めるため提案しました。` };
+  // 3. 時間が十分にある（30分以上）なら演習
+  if (minutes >= 30 && findExercise()) {
+    return { selected: findExercise(), reasonDetail: `使える時間（${minutes}分）を活かして答案作成を進めるため提案しました。` };
   }
 
-  // 3. 短時間（10〜20分）
-  if (minutes <= 20 || goal === 'input') {
-    const shortCand = candidates.find(c => c.type === '短く説明する' || c.type === '更新を読む' || c.type === '実務への影響を整理する') || candidates[0];
-    return { selected: shortCand, reasonDetail: `短時間（${minutes}分）で完了できるキャッチアップ・アウトプットとして提案しました。` };
+  // 4. 短時間（10〜20分）ならキャッチアップ
+  if (minutes <= 20 && findInput()) {
+    return { selected: findInput(), reasonDetail: `短時間（${minutes}分）で終わるキャッチアップとして提案しました。` };
   }
 
-  return { selected: candidates[0], reasonDetail: '現在の学習状況と設定条件に最も合致するクエストを提案しました。' };
+  return { selected: candidates[0], reasonDetail: '現在の学習状況と条件に最も合うクエストを提案しました。' };
 }
 
 // Jevによるクエスト推薦 (Choice primitive を利用)
 async function recommendQuestWithJev({ store, category, minutes, goal }) {
   const candidates = generateQuestCandidates({ store, category, minutes, goal });
-  const apiKeyConfigured = Boolean(process.env.JEV_API_KEY && process.env.JEV_API_KEY.trim());
+  const apiKeyConfigured = Boolean(getJevKeyInfo().key);
 
   if (!apiKeyConfigured) {
     const ruleResult = selectQuestByRule(candidates, { minutes, goal, category });
@@ -354,7 +404,7 @@ async function recommendQuestWithJev({ store, category, minutes, goal }) {
 - 学習目的/気分: ${goal || 'バランス学習'}
 - 登録学習項目数: ${store.items.length}件
 - 過去の演習履歴数: ${store.history.length}件
-- 未克服の誤答数: ${store.history.filter(h => !h.isCorrect).length}件`;
+- 未克服の誤答数: ${store.history.filter(h => !h.isCorrect && !h.resolved).length}件`;
 
   const jevRes = await callJevSystemOne({
     state: statePrompt,
@@ -377,7 +427,7 @@ async function recommendQuestWithJev({ store, category, minutes, goal }) {
       quest: selected,
       allCandidates: candidates,
       decisionSource: 'jev',
-      decisionNote: `Jev判断モデル (Choice) により、現在の学習状態と制限時間から最適と判定されました。`,
+      decisionNote: 'Jev (Choice) が、現在の学習状態と使える時間から最適なクエストを選びました。',
       jevConfidenceScore: confidence, // 内部評価・デバッグ用（正解率としては表示しない）
       jevStatus: 'SUCCESS'
     };
@@ -389,7 +439,7 @@ async function recommendQuestWithJev({ store, category, minutes, goal }) {
     quest: fallbackResult.selected,
     allCandidates: candidates,
     decisionSource: 'rule_fallback',
-    decisionNote: `Jev接続不能または判定未確定のため、アプリ内ルールベースで提案しました。(${jevRes.reason || 'ERR'})`,
+    decisionNote: `Jev に接続できなかったため、アプリ内ルールで提案しました。(${jevRes.reason || 'ERR'})`,
     jevStatus: 'FAILED',
     jevError: jevRes.reason
   };
@@ -397,7 +447,7 @@ async function recommendQuestWithJev({ store, category, minutes, goal }) {
 
 // Jevによる評価判定 (Score & Noul primitives を利用)
 async function evaluateResultWithJev({ resultData }) {
-  const apiKeyConfigured = Boolean(process.env.JEV_API_KEY && process.env.JEV_API_KEY.trim());
+  const apiKeyConfigured = Boolean(getJevKeyInfo().key);
 
   if (!apiKeyConfigured) {
     // ルールベース判定
@@ -459,7 +509,7 @@ function parseJsonBody(req) {
     let body = '';
     req.on('data', chunk => {
       body += chunk;
-      if (body.length > 1e6) {
+      if (body.length > 5e6) {
         req.destroy();
         reject(new Error('Payload too large'));
       }
@@ -506,115 +556,100 @@ function serveStaticFile(res, filePath) {
   });
 }
 
+function jevStatusPayload() {
+  const info = getJevKeyInfo();
+  return {
+    jevConfigured: Boolean(info.key),
+    keySource: info.source, // 'env' | 'saved' | 'none'
+    maskedKey: maskKey(info.key)
+  };
+}
+
+function describeJevError(result) {
+  if (result.reason === 'TIMEOUT') return `タイムアウトしました（${JEV_TIMEOUT_MS / 1000}秒）。ネットワーク環境を確認してください。`;
+  if (result.reason === 'NETWORK_ERROR') return `Jev に接続できませんでした: ${result.detail || ''}`;
+  if (result.httpStatus === 401 || result.httpStatus === 403) return 'APIキーが無効です。キーをもう一度確認してください。';
+  if (result.httpStatus) return `Jev API エラー (HTTP ${result.httpStatus}) ${result.detail || ''}`;
+  return 'Jev から想定外の応答がありました。';
+}
+
+async function testJevKey(apiKey) {
+  const startTime = Date.now();
+  const result = await callJevSystemOne({
+    apiKey,
+    state: 'ユーザーが Jev 学習クエストの接続テストを実行中。',
+    questions: {
+      ping_check: { type: 'noul', instructions: '接続は正常ですか？' }
+    }
+  });
+  const elapsedMs = Date.now() - startTime;
+  if (result.success) {
+    return { success: true, elapsedMs, message: `Jev に接続できました（応答 ${elapsedMs}ms）` };
+  }
+  const errorType = (result.httpStatus === 401 || result.httpStatus === 403) ? 'auth'
+    : (result.reason === 'TIMEOUT' || result.reason === 'NETWORK_ERROR') ? 'network' : 'other';
+  return { success: false, elapsedMs, errorType, error: describeJevError(result) };
+}
+
 const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, `http://${req.headers.host}`);
+  const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const pathname = url.pathname;
 
-  // CORSヘッダー (ローカル検証用)
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  if (req.method === 'OPTIONS') {
-    res.writeHead(204);
-    res.end();
+  // 書き込み系APIは JSON のみ受け付ける。
+  // CORSヘッダーを返さないため、他サイトからのJSON送信（APIキー書き換え・データ上書き）はブラウザが遮断する。
+  if (req.method === 'POST' && !(req.headers['content-type'] || '').includes('application/json')) {
+    sendJson(res, 415, { error: 'Content-Type は application/json を指定してください' });
     return;
   }
 
   try {
-    // 1. Jev接続状態確認 (キーそのものは秘匿)
+    // 1. アプリ / Jev接続状態確認 (キーそのものは返さない)
     if (req.method === 'GET' && pathname === '/api/status') {
-      const hasKey = Boolean(process.env.JEV_API_KEY && process.env.JEV_API_KEY.trim());
       sendJson(res, 200, {
-        jevConfigured: hasKey,
-        dataStorage: DATA_FILE,
-        version: '1.1.0'
+        appName: APP_NAME,
+        version: APP_VERSION,
+        ...jevStatusPayload()
       });
       return;
     }
 
-    // 1-b. Jev APIキーの設定 / 削除
+    // 1-b. Jev APIキーの保存 / 削除
     if (req.method === 'POST' && pathname === '/api/settings/jev-key') {
       const body = await parseJsonBody(req);
-      if (body.apiKey !== undefined) {
-        process.env.JEV_API_KEY = body.apiKey.trim();
+      if (process.env.JEV_API_KEY && process.env.JEV_API_KEY.trim()) {
+        sendJson(res, 409, {
+          success: false,
+          error: '環境変数 JEV_API_KEY が設定されているため、画面からは変更できません。',
+          ...jevStatusPayload()
+        });
+        return;
       }
-      const hasKey = Boolean(process.env.JEV_API_KEY && process.env.JEV_API_KEY.trim());
+      const apiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : '';
+      const config = loadConfig();
+      if (apiKey) {
+        config.jevApiKey = apiKey;
+      } else {
+        delete config.jevApiKey;
+      }
+      saveConfig(config);
       sendJson(res, 200, {
         success: true,
-        jevConfigured: hasKey,
-        message: hasKey ? 'Jev APIキーをセットしました' : 'Jev APIキーをクリアしました（ルールベース動作）'
+        message: apiKey ? 'Jev APIキーを保存しました' : 'Jev APIキーを削除しました（ルールで動作します）',
+        ...jevStatusPayload()
       });
       return;
     }
 
-    // 1-c. Jev API 接続テスト
+    // 1-c. Jev API 接続テスト (入力中のキー、なければ保存済みのキー)
     if (req.method === 'POST' && pathname === '/api/settings/test-jev') {
       const body = await parseJsonBody(req);
-      const testKey = body.apiKey ? body.apiKey.trim() : process.env.JEV_API_KEY;
+      const testKey = (typeof body.apiKey === 'string' && body.apiKey.trim()) || getJevKeyInfo().key;
       if (!testKey) {
-        sendJson(res, 400, {
-          success: false,
-          error: 'APIキーが入力されていません。キーを入力するか、環境変数 JEV_API_KEY を設定してください。'
-        });
+        sendJson(res, 400, { success: false, error: 'APIキーを入力してください。' });
         return;
       }
-
-      // テスト用の質問を投げてみる
-      const endpoint = 'https://api.typesafe.ai/v1/systemone';
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
-      const startTime = Date.now();
-
-      try {
-        const testRes = await fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${testKey}`
-          },
-          body: JSON.stringify({
-            model: 'jev-latest',
-            state: 'ユーザーがセキュリティ学習アプリの接続テストを実行中。',
-            questions: {
-              ping_check: {
-                type: 'noul',
-                instructions: '接続は正常ですか？'
-              }
-            }
-          }),
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-        const elapsedMs = Date.now() - startTime;
-
-        if (!testRes.ok) {
-          const errText = await testRes.text().catch(() => '');
-          sendJson(res, 200, {
-            success: false,
-            httpStatus: testRes.status,
-            error: `APIエラー (HTTP ${testRes.status}): ${errText.slice(0, 150)}`,
-            elapsedMs
-          });
-          return;
-        }
-
-        const resData = await testRes.json();
-        sendJson(res, 200, {
-          success: true,
-          elapsedMs,
-          answers: resData.answers,
-          message: `接続成功！ (応答時間: ${elapsedMs}ms)`
-        });
-        return;
-      } catch (err) {
-        clearTimeout(timeoutId);
-        sendJson(res, 200, {
-          success: false,
-          error: err.name === 'AbortError' ? 'タイムアウト (4秒)' : `通信エラー: ${err.message}`
-        });
-        return;
-      }
+      sendJson(res, 200, await testJevKey(testKey));
+      return;
     }
 
     // 2. 今日のクエスト推薦 (Jev Choice or ルールベース)
@@ -634,6 +669,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && pathname === '/api/history') {
       const body = await parseJsonBody(req);
       const store = loadStore();
+      const isCorrect = body.isCorrect === true || body.isCorrect === 'true';
 
       // Jev Score / Noul または ルールベースで判定
       const evalRes = await evaluateResultWithJev({ resultData: body });
@@ -641,6 +677,7 @@ const server = http.createServer(async (req, res) => {
       const newHistory = {
         id: `hist_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         itemId: body.itemId || null,
+        retryOf: body.retryOf || null,
         category: body.category || 'sc',
         questType: body.questType || '演習',
         title: body.title || '完了クエスト',
@@ -649,27 +686,48 @@ const server = http.createServer(async (req, res) => {
         criteria: body.criteria || '',
         decisionSource: body.decisionSource || evalRes.decisionSource,
         userAnswer: body.userAnswer || '',
-        isCorrect: body.isCorrect === true || body.isCorrect === 'true',
+        isCorrect,
         mistakeReason: body.mistakeReason || '', // 読み落とし / 知識不足 / 設問要求とのずれ / 時間不足 / その他
         mistakeDetail: body.mistakeDetail || '',
         notes: body.notes || '',
         understandingScore: evalRes.understandingScore,
         noulNeedsReview: evalRes.needsReview,
-        reviewIntervalDays: evalRes.needsReview ? (body.isCorrect ? 7 : 3) : 14,
+        reviewIntervalDays: evalRes.needsReview ? (isCorrect ? 7 : 3) : 14,
         nextReviewDate: evalRes.needsReview
-          ? new Date(Date.now() + (body.isCorrect ? 7 : 3) * 86400000).toISOString()
+          ? new Date(Date.now() + (isCorrect ? 7 : 3) * 86400000).toISOString()
           : null,
         isSample: false,
         completedAt: new Date().toISOString()
       };
 
+      // 再挑戦で正解できたら、元の誤答を「克服済み」にして復習リストから外す
+      let resolvedHistoryId = null;
+      if (newHistory.retryOf) {
+        const original = store.history.find(h => h.id === newHistory.retryOf);
+        if (original) {
+          if (isCorrect) {
+            original.resolved = true;
+            original.resolvedAt = newHistory.completedAt;
+            resolvedHistoryId = original.id;
+          } else {
+            // 再び誤答した場合は数日後にもう一度出題する
+            original.nextReviewDate = new Date(Date.now() + 3 * 86400000).toISOString();
+          }
+        }
+      }
+
       store.history.unshift(newHistory);
       saveStore(store);
+
+      // 演習後に初めて解答ポイントを見せる
+      const item = store.items.find(i => i.id === newHistory.itemId);
 
       sendJson(res, 201, {
         success: true,
         history: newHistory,
-        evaluation: evalRes
+        evaluation: evalRes,
+        resolvedHistoryId,
+        answerNotes: item ? item.notes || '' : ''
       });
       return;
     }
@@ -744,25 +802,26 @@ const server = http.createServer(async (req, res) => {
           }
         });
         saveStore(store);
-        sendJson(res, 200, { success: true, message: 'サンプルデータを追加投入しました' });
+        sendJson(res, 200, { success: true, message: 'サンプルデータを追加しました' });
         return;
       } else if (body.action === 'clear_samples') {
         store.items = store.items.filter(i => !i.isSample);
         store.history = store.history.filter(h => !h.isSample);
         saveStore(store);
-        sendJson(res, 200, { success: true, message: 'サンプルデータを削除しました（実データのみ保持）' });
+        sendJson(res, 200, { success: true, message: 'サンプルデータを削除しました（あなたのデータは残っています）' });
         return;
       }
       sendJson(res, 400, { error: 'Unknown action' });
       return;
     }
 
-    // 8. データのエクスポート / バックアップ
+    // 8. データのエクスポート / バックアップ (APIキーは含めない)
     if (req.method === 'GET' && pathname === '/api/backup') {
       const store = loadStore();
+      const date = new Date().toISOString().slice(0, 10);
       res.writeHead(200, {
         'Content-Type': 'application/json; charset=utf-8',
-        'Content-Disposition': 'attachment; filename="learning_quest_backup.json"'
+        'Content-Disposition': `attachment; filename="jev_learning_quest_backup_${date}.json"`
       });
       res.end(JSON.stringify(store, null, 2));
       return;
@@ -771,31 +830,43 @@ const server = http.createServer(async (req, res) => {
     // 9. データのインポート
     if (req.method === 'POST' && pathname === '/api/backup') {
       const body = await parseJsonBody(req);
-      if (!body.items || !body.history) {
-        sendJson(res, 400, { error: 'Invalid backup format' });
+      if (!Array.isArray(body.items) || !Array.isArray(body.history)) {
+        sendJson(res, 400, { error: 'バックアップファイルの形式が正しくありません' });
         return;
       }
-      saveStore(body);
-      sendJson(res, 200, { success: true, message: 'データをインポートしました' });
+      saveStore({ items: body.items, history: body.history });
+      sendJson(res, 200, { success: true, message: `データを復元しました（素材 ${body.items.length}件 / 記録 ${body.history.length}件）` });
       return;
     }
 
-    // --- 静的ファイル配信 ---
-    let filePath = path.join(PUBLIC_DIR, pathname === '/' ? 'index.html' : pathname);
-    if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+    if (pathname.startsWith('/api/')) {
+      sendJson(res, 404, { error: 'Not Found' });
+      return;
+    }
+
+    // --- 静的ファイル配信 (public/ の外は配信しない) ---
+    const filePath = path.resolve(PUBLIC_DIR, '.' + (pathname === '/' ? '/index.html' : decodeURIComponent(pathname)));
+    if (filePath.startsWith(PUBLIC_DIR + path.sep) && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
       serveStaticFile(res, filePath);
       return;
     }
 
     sendJson(res, 404, { error: 'Not Found' });
   } catch (err) {
-    console.error('Server Error:', err);
-    sendJson(res, 500, { error: 'Internal Server Error', message: err.message });
+    const status = err instanceof SyntaxError ? 400 : 500;
+    if (status === 500) console.error('Server Error:', err);
+    sendJson(res, status, { error: status === 400 ? 'JSONの形式が正しくありません' : 'Internal Server Error', message: err.message });
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`[今日の学習クエスト] サーバー起動完了: http://localhost:${PORT}`);
+server.listen(PORT, HOST, () => {
+  const info = getJevKeyInfo();
+  const keyLabel = {
+    env: '環境変数から読み込み済み (Jev 判断が有効)',
+    saved: '画面で保存したキーを使用 (Jev 判断が有効)',
+    none: '未設定 (ルールで動作中。画面の「設定」から入力できます)'
+  }[info.source];
+  console.log(`[${APP_NAME}] 起動しました: http://localhost:${PORT}`);
   console.log(`- データ保存先: ${DATA_FILE}`);
-  console.log(`- JEV_API_KEY: ${process.env.JEV_API_KEY ? '設定済み (Jev Choice/Score/Noul有効)' : '未設定 (ルールベース動作)'}`);
+  console.log(`- Jev APIキー: ${keyLabel}`);
 });

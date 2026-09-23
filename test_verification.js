@@ -1,150 +1,218 @@
-// 完了条件の総合自動検証スクリプト
+// Jev 学習クエスト 自動検証スクリプト (npm test)
+// 一時データフォルダとモックの Jev API を用意してサーバーを起動するため、
+// 実データ (data/) や本物の Jev API には一切触れません。
 const assert = require('node:assert');
+const http = require('node:http');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { spawn } = require('node:child_process');
+
+const PORT = 3999;
+const MOCK_PORT = 3998;
+const BASE = `http://127.0.0.1:${PORT}`;
+const VALID_KEY = 'jev_test_valid_key_123456';
+const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jev-lq-test-'));
+
+// --- モック Jev API: VALID_KEY のみ受け付け、候補の先頭を選ぶ ---
+const mockJev = http.createServer((req, res) => {
+  let body = '';
+  req.on('data', c => { body += c; });
+  req.on('end', () => {
+    if (req.headers.authorization !== `Bearer ${VALID_KEY}`) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end('{"error":"invalid api key"}');
+      return;
+    }
+    const { questions } = JSON.parse(body);
+    const answers = {};
+    for (const [name, q] of Object.entries(questions)) {
+      if (q.type === 'choice') answers[name] = { choice: Object.keys(q.criteria)[0], confidence: 0.9 };
+      if (q.type === 'score') answers[name] = { score: 2 };
+      if (q.type === 'noul') answers[name] = { noul: true };
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ answers }));
+  });
+});
+
+async function post(p, body, headers = { 'Content-Type': 'application/json' }) {
+  const res = await fetch(BASE + p, { method: 'POST', headers, body: typeof body === 'string' ? body : JSON.stringify(body) });
+  return { status: res.status, data: await res.json().catch(() => ({})) };
+}
+
+async function get(p) {
+  const res = await fetch(BASE + p);
+  return { status: res.status, data: await res.json().catch(() => ({})) };
+}
+
+async function waitForServer() {
+  for (let i = 0; i < 50; i++) {
+    try {
+      await fetch(`${BASE}/api/status`);
+      return;
+    } catch (e) {
+      await new Promise(r => setTimeout(r, 100));
+    }
+  }
+  throw new Error('サーバーが起動しませんでした');
+}
 
 async function runVerification() {
-  console.log('=== [1] キー未設定時の動作検証 ===');
+  console.log('=== [1] キー未設定時の動作 ===');
+  const { data: status } = await get('/api/status');
+  assert.strictEqual(status.appName, 'Jev 学習クエスト');
+  assert.strictEqual(status.jevConfigured, false);
+  assert.strictEqual(status.keySource, 'none');
+  console.log('✔ JEV_API_KEY 未設定でも起動し、ルール動作と認識される');
 
-  // 1-1. ステータス確認
-  const statusRes = await fetch('http://localhost:3000/api/status');
-  const status = await statusRes.json();
-  assert.strictEqual(status.jevConfigured, false, 'Jevキー未設定が正しく認識されていること');
-  console.log('✔ ステータス確認成功: JEV_API_KEY未設定でもアプリが稼働中');
-
-  // 1-2. 新規の支援士過去問と技術情報を登録
-  console.log('\n=== [2] 学習素材の登録 & 出典・次アクション検証 ===');
-  const regSCRes = await fetch('http://localhost:3000/api/registered-items', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      type: 'sc_past_paper',
-      category: 'sc',
-      title: '令和6年春期 支援士 科目B 問3 (DNSSEC)',
-      source: 'IPA 過去問題 令和6年春期',
-      publishedDate: '2024-04-21',
-      questionText: '設問2: DNSキャッシュポイズニング攻撃に対してDNSSECが提供するセキュリティ機能を2つ答えよ。',
-      notes: 'データの完全性と発信元認証'
-    })
+  console.log('\n=== [2] 学習素材の登録 ===');
+  const regSC = await post('/api/registered-items', {
+    type: 'sc_past_paper',
+    category: 'sc',
+    title: '令和6年春期 支援士 科目B 問3 (DNSSEC)',
+    source: 'IPA 過去問題 令和6年春期',
+    questionText: '設問2: DNSSECが提供するセキュリティ機能を2つ答えよ。',
+    notes: 'データの完全性と発信元認証'
   });
-  const regSCData = await regSCRes.json();
-  assert.strictEqual(regSCData.success, true);
-  const scItemId = regSCData.item.id;
-  console.log('✔ 支援士過去問の登録成功:', regSCData.item.title);
+  assert.strictEqual(regSC.data.success, true);
+  const scItemId = regSC.data.item.id;
 
-  const regCURes = await fetch('http://localhost:3000/api/registered-items', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      type: 'catchup',
-      category: 'security',
-      title: 'ゼロトラストネットワークにおけるmTLS運用設計ガイド',
-      source: 'セキュリティ専門機関 レポート',
-      url: 'https://example.com/sec/mtls-guide',
-      publishedDate: '2026-09-22',
-      practicalValue: 'high',
-      nextAction: '設定を確認する',
-      notes: '証明書失効リスト(CRL)の同期遅延リスクの評価'
-    })
+  const regCU = await post('/api/registered-items', {
+    type: 'catchup',
+    category: 'security',
+    title: 'ゼロトラストにおけるmTLS運用設計ガイド',
+    source: 'セキュリティ専門機関 レポート',
+    nextAction: '設定を確認する'
   });
-  const regCUData = await regCURes.json();
-  assert.strictEqual(regCUData.success, true);
-  assert.strictEqual(regCUData.item.nextAction, '設定を確認する');
-  assert.strictEqual(regCUData.item.source, 'セキュリティ専門機関 レポート');
-  console.log('✔ キャッチアップ情報の登録成功（出典と次の行動が確実に付与）:', regCUData.item.title, '->', regCUData.item.nextAction);
+  assert.strictEqual(regCU.data.item.nextAction, '設定を確認する');
+  console.log('✔ 過去問と記事（出典・次の行動付き）を登録できる');
 
-  // 1-3. クエスト推薦 (登録した支援士過去問が候補に反映されるか)
-  console.log('\n=== [3] クエスト推薦とルールベース判定 ===');
-  const recRes = await fetch('http://localhost:3000/api/quest/recommend', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ minutes: 30, category: 'sc', goal: 'exercise' })
+  console.log('\n=== [3] ルールでのクエスト推薦 ===');
+  const rec = await post('/api/quest/recommend', { minutes: 30, category: 'sc', goal: 'exercise' });
+  assert.ok(rec.data.quest);
+  assert.strictEqual(rec.data.decisionSource, 'rule');
+  console.log('✔ 推薦:', rec.data.quest.title);
+
+  console.log('\n=== [4] 誤答の記録と再挑戦クエスト ===');
+  const miss = await post('/api/history', {
+    itemId: scItemId,
+    category: 'sc',
+    questType: '過去問を解く',
+    title: 'DNSSEC 初回演習',
+    userAnswer: 'データの暗号化とアクセス制御',
+    isCorrect: false,
+    mistakeReason: '知識不足'
   });
-  const recData = await recRes.json();
-  assert.ok(recData.quest);
-  assert.strictEqual(recData.decisionSource, 'rule');
-  console.log('✔ クエスト推薦成功:', recData.quest.title, `(${recData.decisionSource})`);
+  assert.strictEqual(miss.status, 201);
+  assert.strictEqual(miss.data.evaluation.needsReview, true);
+  assert.strictEqual(miss.data.answerNotes, 'データの完全性と発信元認証', '完了後に解答ポイントが返る');
+  const missId = miss.data.history.id;
 
-  // 1-4. 支援士の演習実行と「誤答・誤答原因」の記録
-  console.log('\n=== [4] クエスト実行 & 支援士誤答原因の記録 ===');
-  const histRes1 = await fetch('http://localhost:3000/api/history', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      itemId: scItemId,
-      category: 'sc',
-      questType: '過去問を解く',
-      title: '令和6年春期 支援士 科目B 問3 (DNSSEC) 初回演習',
-      minutes: 25,
-      reason: '科目Bの記述演習',
-      criteria: '完全性と発信元認証のキーワードを正確に記述できること',
-      decisionSource: 'rule',
-      userAnswer: 'データの暗号化とアクセスコントロール。',
-      isCorrect: false, // 誤答
-      mistakeReason: '知識不足', // 誤答原因
-      mistakeDetail: 'DNSSECは暗号化ではなく電子署名による完全性・認証を提供する点を混同していた',
-      notes: '3日後に再挑戦する'
-    })
+  // 復習期限を過去にして、再挑戦が最優先になることを確認
+  const storeFile = path.join(dataDir, 'store.json');
+  const store = JSON.parse(fs.readFileSync(storeFile, 'utf8'));
+  store.history.find(h => h.id === missId).nextReviewDate = new Date(Date.now() - 1000).toISOString();
+  fs.writeFileSync(storeFile, JSON.stringify(store));
+
+  const recReview = await post('/api/quest/recommend', { minutes: 20, category: 'sc', goal: 'weakness' });
+  assert.strictEqual(recReview.data.quest.type, '誤答を直す');
+  assert.strictEqual(recReview.data.quest.historyId, missId);
+  console.log('✔ 誤答が再挑戦クエストとして最優先で推薦される');
+
+  console.log('\n=== [5] 再挑戦に正解すると克服済みになる ===');
+  const retry = await post('/api/history', {
+    itemId: scItemId,
+    retryOf: missId,
+    category: 'sc',
+    questType: '誤答を直す',
+    title: '【再挑戦】DNSSEC',
+    userAnswer: 'データの完全性と発信元認証',
+    isCorrect: true
   });
-  const histData1 = await histRes1.json();
-  assert.strictEqual(histData1.success, true);
-  assert.strictEqual(histData1.evaluation.needsReview, true);
-  console.log('✔ 誤答結果の保存成功（要復習フラグ付与）:', histData1.history.title);
+  assert.strictEqual(retry.data.resolvedHistoryId, missId);
+  const { data: hist } = await get('/api/history');
+  assert.strictEqual(hist.history.find(h => h.id === missId).resolved, true);
+  const recAfter = await post('/api/quest/recommend', { minutes: 20, category: 'sc', goal: 'weakness' });
+  assert.notStrictEqual(recAfter.data.quest.historyId, missId, '克服済みは再出題されない');
+  console.log('✔ 克服済みの誤答は復習リストと推薦から外れる');
 
-  // 1-5. 誤答から再挑戦クエストが最優先候補として生成されるか検証
-  console.log('\n=== [5] 誤答からの再挑戦クエスト自動生成検証 ===');
-  const recReviewRes = await fetch('http://localhost:3000/api/quest/recommend', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ minutes: 20, category: 'sc', goal: 'weakness' })
-  });
-  const recReviewData = await recReviewRes.json();
-  assert.ok(recReviewData.quest);
-  assert.strictEqual(recReviewData.quest.type, '誤答を直す');
-  assert.ok(recReviewData.quest.title.includes('弱点克服'));
-  console.log('✔ 再挑戦クエストが最優先で推薦された:', recReviewData.quest.title);
-  console.log('  理由:', recReviewData.quest.reason);
+  console.log('\n=== [6] Jev APIキーの保存・マスク・削除 ===');
+  const badTest = await post('/api/settings/test-jev', { apiKey: 'jev_wrong_key_000000' });
+  assert.strictEqual(badTest.data.success, false);
+  assert.match(badTest.data.error, /無効/);
+  assert.strictEqual(badTest.data.errorType, 'auth');
+  console.log('✔ 無効なキーの接続テストは分かりやすいエラーになる');
 
-  // 1-6. キャッチアップクエストの実行と完了
-  console.log('\n=== [6] キャッチアップクエスト実行 & 次の行動記録 ===');
-  const histRes2 = await fetch('http://localhost:3000/api/history', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      itemId: regCUData.item.id,
-      category: 'security',
-      questType: '実務への影響を整理する',
-      title: '技術キャッチアップ: ゼロトラストネットワークにおけるmTLS運用設計ガイド',
-      minutes: 15,
-      reason: '実務への影響を整理し設定を確認する',
-      criteria: '社内ステージング環境のmTLS設定とCRL更新頻度を確認する',
-      decisionSource: 'rule',
-      userAnswer: '社内ステージングのCRL同期間隔を24hから1hに短縮するタスクを起票した。',
-      isCorrect: true,
-      notes: '来週のインフラレビューで共有'
-    })
-  });
-  const histData2 = await histRes2.json();
-  assert.strictEqual(histData2.success, true);
-  console.log('✔ キャッチアップクエストの完了保存成功:', histData2.history.title);
+  const saved = await post('/api/settings/jev-key', { apiKey: `  ${VALID_KEY}  ` });
+  assert.strictEqual(saved.data.success, true);
+  assert.strictEqual(saved.data.keySource, 'saved');
+  assert.strictEqual(saved.data.maskedKey, 'jev_••••3456');
+  assert.ok(!JSON.stringify(saved.data).includes(VALID_KEY), 'キー全体はレスポンスに含めない');
+  const config = JSON.parse(fs.readFileSync(path.join(dataDir, 'config.json'), 'utf8'));
+  assert.strictEqual(config.jevApiKey, VALID_KEY);
+  console.log('✔ キーは data/config.json に保存され、画面にはマスク表示のみ');
 
-  // 1-7. 再起動後の永続化確認テスト
-  console.log('\n=== [7] 再起動後のデータ永続化検証 ===');
-  const fs = require('node:fs');
-  const storePath = require('node:path').join(__dirname, 'data', 'store.json');
-  const rawSaved = fs.readFileSync(storePath, 'utf8');
-  const savedData = JSON.parse(rawSaved);
-  const foundSCItem = savedData.items.find(i => i.id === scItemId);
-  const foundHistory = savedData.history.find(h => h.itemId === scItemId);
-  assert.ok(foundSCItem, '登録した支援士アイテムがファイルに永続化されていること');
-  assert.ok(foundHistory, '登録した誤答履歴がファイルに永続化されていること');
-  assert.strictEqual(foundHistory.mistakeReason, '知識不足');
-  console.log('✔ ファイルへの永続化確認成功 (data/store.json)');
+  const goodTest = await post('/api/settings/test-jev', {});
+  assert.strictEqual(goodTest.data.success, true);
+  console.log('✔ 保存済みキーで接続テストが成功する');
+
+  const recJev = await post('/api/quest/recommend', { minutes: 20, category: 'all' });
+  assert.strictEqual(recJev.data.decisionSource, 'jev');
+  const evalJev = await post('/api/history', { category: 'ai', title: 'Jev評価テスト', userAnswer: 'x', isCorrect: true });
+  assert.strictEqual(evalJev.data.evaluation.decisionSource, 'jev');
+  console.log('✔ キー保存後はクエスト選定と評価に Jev が使われる');
+
+  const { data: backup } = await get('/api/backup');
+  assert.ok(!JSON.stringify(backup).includes(VALID_KEY), 'バックアップにキーを含めない');
+  console.log('✔ バックアップにAPIキーは含まれない');
+
+  const cleared = await post('/api/settings/jev-key', { apiKey: '' });
+  assert.strictEqual(cleared.data.jevConfigured, false);
+  const recRule = await post('/api/quest/recommend', { minutes: 20, category: 'all' });
+  assert.strictEqual(recRule.data.decisionSource, 'rule');
+  console.log('✔ キーを削除するとルール動作に戻る');
+
+  console.log('\n=== [7] 安全性 ===');
+  const formPost = await post('/api/settings/jev-key', 'apiKey=evil', { 'Content-Type': 'text/plain' });
+  assert.strictEqual(formPost.status, 415);
+  const statusRes = await fetch(`${BASE}/api/status`);
+  assert.strictEqual(statusRes.headers.get('access-control-allow-origin'), null);
+  const traversal = await fetch(`${BASE}/..%2fserver.js`);
+  assert.strictEqual(traversal.status, 404);
+  const badJson = await post('/api/history', '{broken', { 'Content-Type': 'application/json' });
+  assert.strictEqual(badJson.status, 400);
+  console.log('✔ JSON以外のPOST拒否 / CORS無効 / public外のファイル非公開 / 不正JSONは400');
 
   console.log('\n=========================================');
-  console.log('🎉 すべての自動検証要件をパスしました！');
+  console.log('🎉 すべての自動検証をパスしました');
   console.log('=========================================');
 }
 
-runVerification().catch(err => {
-  console.error('❌ 検証失敗:', err);
-  process.exit(1);
+let serverProc;
+mockJev.listen(MOCK_PORT, '127.0.0.1', async () => {
+  serverProc = spawn(process.execPath, [path.join(__dirname, 'server.js')], {
+    env: {
+      ...process.env,
+      PORT: String(PORT),
+      LQ_DATA_DIR: dataDir,
+      JEV_API_KEY: '',
+      JEV_API_URL: `http://127.0.0.1:${MOCK_PORT}/v1/systemone`
+    },
+    stdio: ['ignore', 'ignore', 'inherit']
+  });
+
+  let exitCode = 0;
+  try {
+    await waitForServer();
+    await runVerification();
+  } catch (err) {
+    console.error('❌ 検証失敗:', err);
+    exitCode = 1;
+  } finally {
+    serverProc.kill();
+    mockJev.close();
+    fs.rmSync(dataDir, { recursive: true, force: true });
+    process.exit(exitCode);
+  }
 });
