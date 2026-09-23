@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>今日の学習クエスト</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- サイドバー / ナビゲーション -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-icon">⚔️</div>
+        <div class="brand-text">
+          <h1>今日の学習クエスト</h1>
+          <p class="subtitle">支援士・AI・クラウド・セキュリティ</p>
+        </div>
+      </div>
+
+      <nav class="nav-menu">
+        <button class="nav-item active" data-tab="home">
+          <span class="nav-icon">🏠</span>
+          <span class="nav-label">ホーム</span>
+        </button>
+        <button class="nav-item" data-tab="quest-run" id="navQuestRun">
+          <span class="nav-icon">⏱️</span>
+          <span class="nav-label">クエスト実行</span>
+          <span class="badge-dot" id="activeQuestDot" style="display:none;"></span>
+        </button>
+        <button class="nav-item" data-tab="records">
+          <span class="nav-icon">📊</span>
+          <span class="nav-label">学習記録 & 弱点</span>
+        </button>
+        <button class="nav-item" data-tab="register">
+          <span class="nav-icon">📝</span>
+          <span class="nav-label">情報登録</span>
+        </button>
+        <button class="nav-item" data-tab="settings">
+          <span class="nav-icon">⚙️</span>
+          <span class="nav-label">設定 & Jev</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-status">
+        <div class="status-indicator">
+          <span class="indicator-dot" id="jevStatusDot"></span>
+          <span class="indicator-text" id="jevStatusText">Jev判定: 確認中...</span>
+        </div>
+        <div class="sample-notice" id="sampleNoticeBadge">
+          <span>🏷️ サンプルデータ読み込み中</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- メインコンテンツ -->
+    <main class="main-content">
+      <!-- 画面1: ホーム -->
+      <section id="tab-home" class="tab-pane active">
+        <header class="section-header">
+          <h2>今日のクエストを始める</h2>
+          <p class="section-desc">今日の利用可能時間と学習の目的に合わせて、最適な1クエストを提示します。</p>
+        </header>
+
+        <!-- 条件設定パネル -->
+        <div class="condition-card">
+          <div class="condition-group">
+            <label class="condition-label">利用可能時間</label>
+            <div class="btn-group" id="timeSelector">
+              <button type="button" class="btn-option" data-value="10">10分</button>
+              <button type="button" class="btn-option active" data-value="20">20分</button>
+              <button type="button" class="btn-option" data-value="30">30分</button>
+              <button type="button" class="btn-option" data-value="60">60分</button>
+            </div>
+          </div>
+
+          <div class="condition-group">
+            <label class="condition-label">対象分野</label>
+            <div class="btn-group" id="catSelector">
+              <button type="button" class="btn-option active" data-value="all">全分野</button>
+              <button type="button" class="btn-option" data-value="sc">支援士 (SC)</button>
+              <button type="button" class="btn-option" data-value="ai">AI</button>
+              <button type="button" class="btn-option" data-value="cloud">クラウド</button>
+              <button type="button" class="btn-option" data-value="security">セキュリティ</button>
+            </div>
+          </div>
+
+          <div class="condition-group">
+            <label class="condition-label">今日の気分・目的</label>
+            <div class="btn-group" id="goalSelector">
+              <button type="button" class="btn-option active" data-value="balance">バランス良く</button>
+              <button type="button" class="btn-option" data-value="weakness">弱点克服・誤答直し</button>
+              <button type="button" class="btn-option" data-value="exercise">過去問記述演習</button>
+              <button type="button" class="btn-option" data-value="input">短時間キャッチアップ</button>
+            </div>
+          </div>
+
+          <div class="condition-actions">
+            <button class="btn btn-secondary" id="btnRefreshRecommend">🔄 クエストを再提案</button>
+            <button class="btn btn-outline" id="btnShowCandidates">📋 ほかの候補から選ぶ</button>
+          </div>
+        </div>
+
+        <!-- 提案された「今日のクエスト」カード -->
+        <div class="quest-recommendation-card" id="recommendedQuestCard">
+          <div class="card-badge-row">
+            <span class="badge badge-category" id="recCategory">支援士</span>
+            <span class="badge badge-type" id="recType">過去問を解く</span>
+            <span class="badge badge-time" id="recTime">⏱️ 20分</span>
+            <span class="badge badge-decision" id="recDecisionSource">判定元: 取得中</span>
+          </div>
+
+          <h3 class="quest-title" id="recTitle">クエストを読み込み中...</h3>
+          <p class="quest-source" id="recSource"></p>
+
+          <div class="quest-detail-grid">
+            <div class="detail-block">
+              <span class="detail-label">🎯 選んだ理由</span>
+              <p class="detail-content" id="recReason">-</p>
+            </div>
+            <div class="detail-block">
+              <span class="detail-label">✅ 今日の完了条件</span>
+              <p class="detail-content" id="recCriteria">-</p>
+            </div>
+          </div>
+
+          <div class="quest-action-row">
+            <button class="btn btn-primary btn-large" id="btnStartQuest">このクエストを開始する 🚀</button>
+          </div>
+        </div>
+
+        <!-- 直近の学習進捗ダッシュボード -->
+        <div class="stats-overview-grid">
+          <div class="stat-card">
+            <span class="stat-num" id="statCompletedTotal">0</span>
+            <span class="stat-label">今週完了したクエスト</span>
+          </div>
+          <div class="stat-card stat-alert">
+            <span class="stat-num" id="statPendingReviews">0</span>
+            <span class="stat-label">再挑戦待ちの弱点</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-num" id="statRegisteredItems">0</span>
+            <span class="stat-label">登録済み学習素材</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 画面2: クエスト実行 -->
+      <section id="tab-quest-run" class="tab-pane">
+        <header class="section-header">
+          <h2>クエスト実行 & 結果入力</h2>
+          <p class="section-desc">タイマーをセットし、解説を見ずに答案作成またはインプット・整理を進めます。</p>
+        </header>
+
+        <div class="run-container">
+          <!-- クエスト概要 & タイマー -->
+          <div class="run-info-card">
+            <div class="run-header-row">
+              <div>
+                <span class="badge badge-category" id="runCategory">支援士</span>
+                <span class="badge badge-type" id="runType">過去問を解く</span>
+                <span class="badge badge-decision" id="runDecisionSource">判定: -</span>
+              </div>
+              <div class="timer-box">
+                <div class="timer-display" id="timerDisplay">20:00</div>
+                <div class="timer-controls">
+                  <button class="btn-icon" id="btnTimerToggle" title="開始/一時停止">▶</button>
+                  <button class="btn-icon" id="btnTimerReset" title="リセット">↺</button>
+                </div>
+              </div>
+            </div>
+
+            <h3 class="run-title" id="runTitle">選択されたクエストがありません</h3>
+            <div class="run-meta-row">
+              <span id="runSourceRef"></span>
+            </div>
+
+            <!-- 設問・作業条件（解説は解くまで見せない） -->
+            <div class="run-prompt-box" id="runPromptBox">
+              <span class="prompt-label">📋 作業内容 / 設問文（解説なし）</span>
+              <div class="prompt-text" id="runQuestionText">ホーム画面からクエストを選択して開始してください。</div>
+            </div>
+
+            <div class="criteria-box">
+              <span class="criteria-label">🏁 完了条件:</span>
+              <span id="runCriteria">設問の要求を満たす答案を書き上げること</span>
+            </div>
+          </div>
+
+          <!-- 解答・アウトプット入力フォーム -->
+          <div class="run-form-card" id="runFormCard">
+            <h4>あなたの答案・作業メモ入力</h4>
+
+            <div class="form-group">
+              <label for="runUserAnswer">答案または気付きメモ <span class="required">*</span></label>
+              <textarea id="runUserAnswer" rows="4" placeholder="設問の字数制限や要求事項を意識して入力してください。キャッチアップの場合は確認内容・要点を入力します。"></textarea>
+            </div>
+
+            <!-- 自己採点 & 誤答原因分析 -->
+            <div class="evaluation-section">
+              <label class="form-label">自己採点・理解度</label>
+              <div class="btn-group" id="isCorrectSelector">
+                <button type="button" class="btn-option active" data-value="true">⭕ 正解 / 達成</button>
+                <button type="button" class="btn-option" data-value="false">❌ 誤答 / 課題あり</button>
+              </div>
+
+              <!-- 誤答時のみ表示する原因分類 -->
+              <div id="mistakeSection" class="mistake-analysis-box" style="display: none;">
+                <label class="form-label">誤答・未達の原因（次回の再挑戦に活用）</label>
+                <div class="btn-group" id="mistakeReasonSelector">
+                  <button type="button" class="btn-option active" data-value="読み落とし">読み落とし</button>
+                  <button type="button" class="btn-option" data-value="知識不足">知識不足</button>
+                  <button type="button" class="btn-option" data-value="設問要求とのずれ">設問要求とのずれ</button>
+                  <button type="button" class="btn-option" data-value="時間不足">時間不足</button>
+                  <button type="button" class="btn-option" data-value="その他">その他</button>
+                </div>
+                <div class="form-group" style="margin-top: 10px;">
+                  <input type="text" id="runMistakeDetail" placeholder="具体的に何が足りなかったか（例: XSS対策のCookie属性指定を失念）">
+                </div>
+              </div>
+
+              <div class="form-group" style="margin-top: 15px;">
+                <label for="runGeneralNotes">次回への申し送り・復習メモ</label>
+                <input type="text" id="runGeneralNotes" placeholder="3日後に再挑戦する際の注意点など">
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button class="btn btn-primary btn-large" id="btnFinishQuest">結果を保存して完了する ✅</button>
+            </div>
+          </div>
+
+          <!-- クエスト完了時の判定表示モーダル/カード -->
+          <div class="completion-feedback-card" id="completionCard" style="display:none;">
+            <div class="completion-header">
+              <span class="completion-icon">🎉</span>
+              <h3>クエスト完了！学習記録を保存しました</h3>
+            </div>
+            <div class="completion-evaluation">
+              <div class="eval-item">
+                <span class="eval-label">理解度スコア (Score)</span>
+                <span class="eval-val" id="evalScoreText">-</span>
+              </div>
+              <div class="eval-item">
+                <span class="eval-label">再挑戦・復習要否 (Noul)</span>
+                <span class="eval-val" id="evalNoulText">-</span>
+              </div>
+              <div class="eval-item">
+                <span class="eval-label">判定エンジン</span>
+                <span class="badge" id="evalSourceBadge">-</span>
+              </div>
+            </div>
+            <p class="completion-msg" id="evalComment"></p>
+            <div class="form-actions">
+              <button class="btn btn-secondary" id="btnBackToHome">ホームに戻る</button>
+              <button class="btn btn-outline" id="btnGoToRecords">学習記録を確認する</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 画面3: 学習記録 & 弱点 -->
+      <section id="tab-records" class="tab-pane">
+        <header class="section-header">
+          <h2>学習記録 & 弱点・再挑戦</h2>
+          <p class="section-desc">誤答原因の傾向を把握し、解説を見ずに再挑戦して弱点を克服します。</p>
+        </header>
+
+        <!-- 再挑戦待ちリスト（最優先表示） -->
+        <div class="records-card pending-review-container">
+          <div class="card-header-flex">
+            <h3>🔥 再挑戦待ちのクエスト（弱点克服）</h3>
+            <span class="badge badge-alert" id="pendingCountBadge">0件</span>
+          </div>
+          <p class="card-subdesc">誤答原因を記録した過去問など、数日後に解説なしで再解答すべき問題です。</p>
+          <div class="pending-list" id="pendingReviewList">
+            <!-- 動的挿入 -->
+          </div>
+        </div>
+
+        <!-- 弱点・誤答原因の分析 -->
+        <div class="records-card">
+          <h3>📊 誤答原因の傾向分析</h3>
+          <div class="mistake-stat-grid" id="mistakeAnalysisGrid">
+            <!-- 動的挿入 -->
+          </div>
+        </div>
+
+        <!-- 過去の全履歴一覧 -->
+        <div class="records-card">
+          <div class="card-header-flex">
+            <h3>📜 クエスト実行履歴</h3>
+            <div class="filter-controls">
+              <select id="historyFilterCategory" class="form-select">
+                <option value="all">全分野</option>
+                <option value="sc">支援士</option>
+                <option value="ai">AI</option>
+                <option value="cloud">クラウド</option>
+                <option value="security">セキュリティ</option>
+              </select>
+            </div>
+          </div>
+          <div class="history-table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>日時</th>
+                  <th>分野</th>
+                  <th>種別</th>
+                  <th>クエスト名</th>
+                  <th>所要</th>
+                  <th>結果</th>
+                  <th>判定元</th>
+                  <th>次回復習</th>
+                </tr>
+              </thead>
+              <tbody id="historyTableBody">
+                <!-- 動的挿入 -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 画面4: 情報登録 -->
+      <section id="tab-register" class="tab-pane">
+        <header class="section-header">
+          <h2>学習素材・情報の登録</h2>
+          <p class="section-desc">支援士の過去問出典や、AI・クラウド・セキュリティの記事を「次の行動」とともに登録します。</p>
+        </header>
+
+        <div class="register-tabs">
+          <button class="subtab-btn active" data-subtab="reg-sc">支援士 過去問の登録</button>
+          <button class="subtab-btn" data-subtab="reg-catchup">技術キャッチアップの登録</button>
+        </div>
+
+        <!-- 支援士 過去問登録フォーム -->
+        <form id="formRegisterSC" class="register-form active">
+          <div class="form-info-note">
+            ℹ️ <strong>著作権への配慮:</strong> 過去問の本文を丸ごとコピーする必要はありません。問題の出典（年・期・問番号）、設問番号、あなたが解くべきテーマと設問文を登録してください。
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group full-width">
+              <label for="scTitle">問題名 / テーマ <span class="required">*</span></label>
+              <input type="text" id="scTitle" required placeholder="例: 令和5年秋期 科目B 問1 (Webアプリケーションのセキュリティ)">
+            </div>
+            <div class="form-group">
+              <label for="scSource">出典 / 公式過去問情報 <span class="required">*</span></label>
+              <input type="text" id="scSource" required placeholder="例: IPA過去問題 令和5年秋期 科目B">
+            </div>
+            <div class="form-group">
+              <label for="scDate">出題時期 / 公開日</label>
+              <input type="date" id="scDate">
+            </div>
+            <div class="form-group full-width">
+              <label for="scQuestionText">設問文 / 解くべき問い <span class="required">*</span></label>
+              <textarea id="scQuestionText" rows="3" required placeholder="例: 設問1: 被害を受けたECサイトでCookie窃取を防ぐために設定すべき属性とその理由を40字以内で述べよ。"></textarea>
+            </div>
+            <div class="form-group full-width">
+              <label for="scNotes">解答のポイント / メモ (※演習前には表示されません)</label>
+              <textarea id="scNotes" rows="2" placeholder="HttpOnlyとSecure属性の違い。XSS対策としての位置づけ。"></textarea>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">支援士の過去問を登録する 💾</button>
+          </div>
+        </form>
+
+        <!-- 技術キャッチアップ登録フォーム -->
+        <form id="formRegisterCatchup" class="register-form">
+          <div class="form-info-note">
+            ℹ️ <strong>「読んだ」で終わらせない設計:</strong> 登録した各技術情報には、必ず具体的な「次の行動（1点）」を紐付けます。
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group full-width">
+              <label for="cuTitle">記事・公式発表のタイトル <span class="required">*</span></label>
+              <input type="text" id="cuTitle" required placeholder="例: LLMアプリケーションにおけるプロンプトインジェクション防御ベストプラクティス">
+            </div>
+            <div class="form-group">
+              <label for="cuCategory">対象分野 <span class="required">*</span></label>
+              <select id="cuCategory" required class="form-select">
+                <option value="ai">AI</option>
+                <option value="cloud">クラウド</option>
+                <option value="security">セキュリティ</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="cuSource">出典・メディア名 <span class="required">*</span></label>
+              <input type="text" id="cuSource" required placeholder="例: AWS公式ブログ / IPA注意喚起">
+            </div>
+            <div class="form-group full-width">
+              <label for="cuUrl">URL (任意)</label>
+              <input type="url" id="cuUrl" placeholder="https://...">
+            </div>
+            <div class="form-group">
+              <label for="cuDate">公開日</label>
+              <input type="date" id="cuDate">
+            </div>
+            <div class="form-group">
+              <label for="cuPracticalValue">実務で試す価値</label>
+              <select id="cuPracticalValue" class="form-select">
+                <option value="high">高（今期導入・検証検討）</option>
+                <option value="medium" selected>中（今後の構成変更時に参考）</option>
+                <option value="low">低（一般教養・背景知識）</option>
+              </select>
+            </div>
+            <div class="form-group full-width highlight-group">
+              <label for="cuNextAction">👉 次の行動（必須・1つ選択） <span class="required">*</span></label>
+              <select id="cuNextAction" required class="form-select action-select">
+                <option value="試す">🧪 試す（ハンズオン環境やコードで動かしてみる）</option>
+                <option value="設定を確認する">⚙️ 設定を確認する（既存のクラウド/システム設定と比較照合する）</option>
+                <option value="既存知識と比較する">🧠 既存知識と比較する（過去のアーキテクチャや標準指針と対比する）</option>
+                <option value="チーム向けに説明する">🗣️ チーム向けに説明する（要点を3分で伝えられる形式に整理する）</option>
+              </select>
+            </div>
+            <div class="form-group full-width">
+              <label for="cuNotes">要点メモ / 注目した理由</label>
+              <textarea id="cuNotes" rows="2" placeholder="従来の防御策との違い、どのような環境で特に影響があるか"></textarea>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">キャッチアップ情報を登録する 💾</button>
+          </div>
+        </form>
+
+        <!-- 登録済み素材一覧 -->
+        <div class="registered-list-card">
+          <h3>📚 登録済みの学習素材・記事一覧</h3>
+          <div class="items-list" id="registeredItemsList">
+            <!-- 動的挿入 -->
+          </div>
+        </div>
+      </section>
+
+      <!-- 画面5: 設定 & Jev -->
+      <section id="tab-settings" class="tab-pane">
+        <header class="section-header">
+          <h2>設定 & Jev接続状況</h2>
+          <p class="section-desc">判断特化型AI「Jev」の連携状態、サンプルデータ管理、データのバックアップを操作します。</p>
+        </header>
+
+        <!-- Jevステータスカード -->
+        <div class="settings-card">
+          <h3>🤖 Jev (判断特化モデル) 連携状態</h3>
+          <div class="jev-status-banner" id="jevBanner">
+            <div class="banner-status-icon" id="bannerStatusIcon">⚡</div>
+            <div>
+              <h4 id="bannerStatusTitle">Jev API 接続状況</h4>
+              <p id="bannerStatusDesc">確認中...</p>
+            </div>
+          </div>
+
+          <div class="jev-guide-box">
+            <h4>Jevの役割と設計思想:</h4>
+            <ul>
+              <li><strong>文章生成は行いません:</strong> Jevはテキスト生成ではなく「Choice（候補選択）」「Score（理解度判定）」「Noul（復習要否真偽）」の3つの判断プリミティブのみに利用されます。</li>
+              <li><strong>確信度の扱い:</strong> Jevの出力する確率は内部の選定判断のみに用いられ、ユーザーの学習正解率として誤認表示することはありません。</li>
+              <li><strong>セキュリティ:</strong> <code>JEV_API_KEY</code> はサーバー環境変数でのみ読み込み、画面やクライアント通信、ログ、リポジトリには一切露出しません。</li>
+              <li><strong>未設定・失敗時の耐障害性:</strong> キー未設定時やAPI通信エラー時は、アプリ内のルールベースロジックへ自動フォールバックし、通常通り利用を継続できます。</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- サンプルデータ管理 -->
+        <div class="settings-card">
+          <h3>🏷️ サンプルデータの管理</h3>
+          <p class="card-subdesc">初回起動時に用意された架空の過去問・記事サンプルデータを管理します。実データと明確に区別されています。</p>
+          <div class="btn-row">
+            <button class="btn btn-secondary" id="btnAddSamples">サンプルデータを再投入</button>
+            <button class="btn btn-danger" id="btnClearSamples">サンプルデータを全削除 (実データのみ残す)</button>
+            <button class="btn btn-outline" id="btnResetAll">全初期化 (初期サンプル状態へ)</button>
+          </div>
+        </div>
+
+        <!-- データバックアップ・エクスポート -->
+        <div class="settings-card">
+          <h3>💾 データの保存・エクスポート</h3>
+          <p class="card-subdesc">学習データはサーバーローカルの <code>data/store.json</code> に自動保存され、アプリ再起動後も保持されます。</p>
+          <div class="btn-row">
+            <button class="btn btn-primary" id="btnExportData">バックアップJSONをダウンロード 📥</button>
+            <label class="btn btn-secondary btn-file-label">
+              バックアップJSONを復元 📤
+              <input type="file" id="fileImportData" accept=".json" style="display:none;">
+            </label>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- クエスト候補選択モーダル -->
+  <div class="modal-overlay" id="candidatesModal" style="display:none;">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>クエスト候補一覧から選択</h3>
+        <button class="btn-close" id="btnCloseModal">×</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">現在の条件（時間・分野・目的）から抽出された候補一覧です。手動で好きなクエストを選択できます。</p>
+        <div class="candidates-list" id="candidatesListContainer">
+          <!-- 動的挿入 -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
