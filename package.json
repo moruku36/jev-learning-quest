@@ -1,18 +1,20 @@
 {
   "name": "jev-learning-quest",
-  "version": "1.2.0",
-  "description": "判断AI Jev が「今日やる1つ」を選ぶ、支援士試験対策と技術キャッチアップのための学習アプリ「Jev 学習クエスト」",
+  "version": "1.3.0",
+  "description": "判断AI Jev が「今日やる1つ」を選ぶ学習Webアプリ「Jev 学習クエスト」（Vercel + Supabase / ローカル両対応）",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "test": "node test_verification.js"
   },
   "keywords": [
-    "learning-quest",
     "jev",
+    "learning-quest",
     "security",
     "cloud",
-    "ai"
+    "ai",
+    "vercel",
+    "supabase"
   ],
   "author": "",
   "license": "MIT",

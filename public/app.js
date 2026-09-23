@@ -38,6 +38,18 @@ const DECISION_LABELS = {
 
 const SETUP_DISMISS_KEY = 'jlq.setupDismissed';
 
+// クラウド版のログイン (Supabase Auth)。バージョン固定 + SRI で改ざんされたスクリプトを読み込まない
+const SUPABASE_JS = {
+  src: 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.0/dist/umd/supabase.js',
+  integrity: 'sha384-xPW3QHswsICVC2mW6BFNwMbhpLkbZ133fKOhxNx3QGGgAOJfL3O9t8r2aWn1aez6'
+};
+
+const AUTH = {
+  mode: 'local',
+  client: null,
+  session: null
+};
+
 document.addEventListener('DOMContentLoaded', async () => {
   initTabs();
   initFilterPills();
@@ -45,18 +57,131 @@ document.addEventListener('DOMContentLoaded', async () => {
   initRunMode();
   initRegisterForms();
   initSettings();
+  initAuthButtons();
 
+  const ready = await initAuth();
+  if (ready) await startApp();
+});
+
+async function startApp() {
+  setHidden('authScreen', true);
+  setHidden('appShell', false);
   await checkJevStatus();
   await loadRecommendedQuest();
   await updateReviewBadge();
-});
+}
+
+// --- 認証 (クラウド版のみ) ---
+function loadScript({ src, integrity }) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = src;
+    script.integrity = integrity;
+    script.crossOrigin = 'anonymous';
+    script.referrerPolicy = 'no-referrer';
+    script.onload = resolve;
+    script.onerror = () => reject(new Error('ログイン用スクリプトを読み込めませんでした'));
+    document.head.appendChild(script);
+  });
+}
+
+function showAuthScreen(message, { canSwitchAccount = false } = {}) {
+  setHidden('appShell', true);
+  setHidden('authScreen', false);
+  const msg = document.getElementById('authMessage');
+  msg.textContent = message || '';
+  msg.hidden = !message;
+  setHidden('btnLogin', canSwitchAccount);
+  setHidden('btnAuthLogout', !canSwitchAccount);
+}
+
+async function initAuth() {
+  let config;
+  try {
+    const res = await fetch('/api/config');
+    config = await res.json();
+  } catch (e) {
+    showAuthScreen('サーバーに接続できませんでした。時間をおいて再度お試しください。');
+    return false;
+  }
+
+  AUTH.mode = config.mode || 'local';
+  if (AUTH.mode !== 'cloud') return true;
+
+  if (config.configError || !config.supabaseUrl || !config.supabaseAnonKey) {
+    showAuthScreen(`サーバーの設定が完了していません。${config.configError || ''}`);
+    setHidden('btnLogin', true);
+    return false;
+  }
+
+  try {
+    await loadScript(SUPABASE_JS);
+  } catch (e) {
+    showAuthScreen(e.message);
+    return false;
+  }
+
+  AUTH.client = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey, {
+    auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+  });
+  AUTH.client.auth.onAuthStateChange((_event, session) => {
+    AUTH.session = session;
+  });
+
+  const { data } = await AUTH.client.auth.getSession();
+  AUTH.session = data.session;
+  // OAuth から戻ってきた直後の ?code= を URL から消す
+  if (window.location.search.includes('code=')) {
+    window.history.replaceState({}, '', window.location.pathname);
+  }
+
+  if (!AUTH.session) {
+    showAuthScreen('');
+    return false;
+  }
+
+  // 許可リストの確認を兼ねて状態を取得
+  const status = await api('/api/status');
+  if (status.success === false) return false;
+  document.getElementById('userEmail').textContent = status.user ? status.user.email : '';
+  setHidden('userMenu', false);
+  return true;
+}
+
+function initAuthButtons() {
+  document.getElementById('btnLogin').addEventListener('click', async () => {
+    if (!AUTH.client) return;
+    const { error } = await AUTH.client.auth.signInWithOAuth({
+      provider: 'github',
+      options: { redirectTo: window.location.origin + '/' }
+    });
+    if (error) showAuthScreen(`ログインを開始できませんでした: ${error.message}`);
+  });
+
+  const logout = async () => {
+    if (AUTH.client) await AUTH.client.auth.signOut();
+    AUTH.session = null;
+    setHidden('userMenu', true);
+    showAuthScreen('ログアウトしました。');
+  };
+  document.getElementById('btnLogout').addEventListener('click', logout);
+  document.getElementById('btnAuthLogout').addEventListener('click', logout);
+}
+
+async function authHeaders() {
+  if (AUTH.mode !== 'cloud' || !AUTH.client) return {};
+  // 期限切れ間近なら supabase-js が自動で更新したトークンを返す
+  const { data } = await AUTH.client.auth.getSession();
+  AUTH.session = data.session;
+  return AUTH.session ? { Authorization: `Bearer ${AUTH.session.access_token}` } : {};
+}
 
 // --- 共通ユーティリティ ---
 async function api(path, options = {}) {
-  const init = { ...options };
+  const init = { ...options, headers: { ...(await authHeaders()), ...(options.headers || {}) } };
   if (options.body !== undefined) {
     init.method = options.method || 'POST';
-    init.headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+    init.headers['Content-Type'] = 'application/json';
     init.body = JSON.stringify(options.body);
   }
   const res = await fetch(path, init);
@@ -64,7 +189,29 @@ async function api(path, options = {}) {
   if (!res.ok && data.success === undefined) {
     data.success = false;
   }
+  if (AUTH.mode === 'cloud' && res.status === 401) {
+    showAuthScreen(data.error || 'もう一度ログインしてください。');
+  } else if (AUTH.mode === 'cloud' && res.status === 403) {
+    showAuthScreen(data.error || 'このアカウントは利用を許可されていません。', { canSwitchAccount: true });
+  }
   return data;
+}
+
+async function downloadBackup() {
+  const res = await fetch('/api/backup', { headers: await authHeaders() });
+  if (!res.ok) {
+    showToast('バックアップを取得できませんでした', 'error');
+    return;
+  }
+  const blob = await res.blob();
+  const match = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '');
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = match ? match[1] : 'jev_learning_quest_backup.json';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(link.href);
 }
 
 function showToast(message, type = 'info') {
@@ -681,6 +828,9 @@ function initSettings() {
   document.getElementById('btnTestJev').addEventListener('click', async () => {
     await runJevTest('');
   });
+  document.getElementById('btnTestJevCloud').addEventListener('click', async () => {
+    await runJevTest('');
+  });
 
   document.getElementById('btnDeleteJevKey').addEventListener('click', async () => {
     if (!confirm('保存済みの Jev APIキーを削除しますか？（ルールで動作するようになります）')) return;
@@ -690,9 +840,7 @@ function initSettings() {
     await checkJevStatus();
   });
 
-  document.getElementById('btnExportJson').addEventListener('click', () => {
-    window.location.href = '/api/backup';
-  });
+  document.getElementById('btnExportJson').addEventListener('click', downloadBackup);
 
   document.getElementById('inImportJson').addEventListener('change', async (e) => {
     const file = e.target.files[0];
@@ -793,6 +941,7 @@ async function checkJevStatus() {
     const data = await api('/api/status');
     STATE.jev = data;
     const fromEnv = data.keySource === 'env';
+    const isCloud = data.mode === 'cloud';
 
     chip.classList.toggle('on', data.jevConfigured);
     chipText.textContent = data.jevConfigured ? 'Jev 有効' : 'Jev 未設定';
@@ -802,11 +951,22 @@ async function checkJevStatus() {
 
     if (data.jevConfigured) {
       statusBox.innerHTML = `使用中のキー: <code>${escapeHtml(data.maskedKey)}</code>
-        <span class="key-source">${fromEnv ? '環境変数 JEV_API_KEY から読み込み' : 'この画面で保存したキー'}</span>`;
+        <span class="key-source">${fromEnv ? (isCloud ? 'Vercel の環境変数 JEV_API_KEY から読み込み' : '環境変数 JEV_API_KEY から読み込み') : 'この画面で保存したキー'}</span>`;
+    } else if (isCloud) {
+      statusBox.innerHTML = 'まだキーが設定されていません。下の手順で Vercel の環境変数に登録してください。';
     } else {
       statusBox.innerHTML = 'まだキーが設定されていません。下の欄にキーを貼り付けて「保存して接続テスト」を押してください。';
     }
     statusBox.className = `key-status${data.jevConfigured ? ' on' : ''}`;
+
+    // クラウド版は Vercel の環境変数で管理し、ローカル版は画面から保存できる
+    setHidden('keyFormRow', isCloud);
+    setHidden('localKeyHelp', isCloud);
+    setHidden('cloudKeyHelp', !isCloud);
+    setHidden('btnTestJevCloud', !data.jevConfigured);
+    document.getElementById('dataLocationText').innerHTML = isCloud
+      ? '学習データはあなたのアカウント専用の領域 (Supabase) に保存されています。本人以外は読み書きできません。'
+      : '学習データはこのPCの <code>data/store.json</code> に保存されています（APIキーはバックアップに含まれません）。';
 
     // 環境変数で設定済みの場合は画面から変更できない
     document.getElementById('txtJevKey').disabled = fromEnv;
