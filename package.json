@@ -1,10 +1,11 @@
 {
-  "name": "todays-learning-quest",
-  "version": "1.0.0",
-  "description": "個人用学習・技術キャッチアップWebアプリ「今日の学習クエスト」",
+  "name": "jev-learning-quest",
+  "version": "1.2.0",
+  "description": "判断AI Jev が「今日やる1つ」を選ぶ、支援士試験対策と技術キャッチアップのための学習アプリ「Jev 学習クエスト」",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node test_verification.js"
   },
   "keywords": [
     "learning-quest",
@@ -14,5 +15,8 @@
     "ai"
   ],
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
 }

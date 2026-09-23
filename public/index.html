@@ -3,42 +3,62 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>今日の学習クエスト</title>
-  <link rel="stylesheet" href="styles.css">
+  <title>Jev 学習クエスト</title>
+  <meta name="description" content="判断AI Jev が「今日やる1つ」を選ぶ、支援士試験対策と技術キャッチアップのための学習アプリ">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%238b5cf6'/%3E%3Ctext x='16' y='23' font-size='20' font-family='sans-serif' font-weight='700' text-anchor='middle' fill='white'%3EJ%3C/text%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;700&family=Zen+Kaku+Gothic+New:wght@500;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div class="app-container">
-    <!-- シンプルヘッダー -->
+    <!-- ヘッダー -->
     <header class="app-header">
       <div class="header-brand">
-        <span class="brand-logo">🛡️</span>
+        <span class="brand-logo" aria-hidden="true">J</span>
         <div>
-          <h1 class="brand-title">今日の学習クエスト</h1>
-          <p class="brand-sub">支援士試験対策 & 技術キャッチアップ</p>
+          <h1 class="brand-title">Jev 学習クエスト</h1>
+          <p class="brand-sub">判断AI Jev が「今日やる1つ」を選ぶ ─ 支援士対策 & 技術キャッチアップ</p>
         </div>
       </div>
-      <nav class="header-nav">
-        <button class="nav-tab active" data-tab="quest">🎯 今日のクエスト</button>
-        <button class="nav-tab" data-tab="review">
-          🔥 弱点・復習
-          <span class="nav-badge" id="reviewCountBadge" style="display:none;">0</span>
-        </button>
-        <button class="nav-tab" data-tab="settings">⚙️ 設定 & 登録</button>
-      </nav>
+      <button class="jev-chip" id="jevChip" type="button" title="Jev の接続設定を開く">
+        <span class="jev-chip-dot"></span>
+        <span id="jevChipText">Jev 確認中...</span>
+      </button>
     </header>
 
-    <!-- メインビュー -->
+    <nav class="header-nav" aria-label="メインメニュー">
+      <button class="nav-tab active" data-tab="quest">🎯 今日のクエスト</button>
+      <button class="nav-tab" data-tab="review">
+        🔁 復習
+        <span class="nav-badge" id="reviewCountBadge" hidden>0</span>
+      </button>
+      <button class="nav-tab" data-tab="register">📝 素材を登録</button>
+      <button class="nav-tab" data-tab="settings">⚙️ 設定</button>
+    </nav>
+
     <main class="app-main">
 
       <!-- ================= 1. 今日のクエスト ================= -->
       <section id="view-quest" class="view-panel active">
-        <!-- 条件選択ピルバー -->
+
+        <!-- Jev 未設定時の案内 -->
+        <div class="setup-banner" id="setupBanner" hidden>
+          <div class="setup-banner-text">
+            <strong>Jev の APIキーを設定しましょう</strong>
+            <p>キーを入れると、Jev があなたの学習状況から「今日のクエスト」と「理解度・復習の要否」を判断します。未設定のままでもルールで全機能を使えます。</p>
+          </div>
+          <div class="setup-banner-actions">
+            <button class="btn btn-jev btn-sm" id="btnSetupKey">APIキーを設定する</button>
+            <button class="btn btn-ghost btn-sm" id="btnDismissSetup">あとで</button>
+          </div>
+        </div>
+
+        <!-- 条件選択 -->
         <div class="filter-bar">
           <div class="filter-group">
-            <span class="filter-label">時間:</span>
+            <span class="filter-label">使える時間</span>
             <div class="pill-group" id="timePills">
               <button class="pill" data-val="10">10分</button>
               <button class="pill active" data-val="20">20分</button>
@@ -47,7 +67,7 @@
             </div>
           </div>
           <div class="filter-group">
-            <span class="filter-label">分野:</span>
+            <span class="filter-label">分野</span>
             <div class="pill-group" id="catPills">
               <button class="pill active" data-val="all">すべて</button>
               <button class="pill" data-val="sc">支援士</button>
@@ -56,15 +76,24 @@
               <button class="pill" data-val="security">セキュリティ</button>
             </div>
           </div>
+          <div class="filter-group">
+            <span class="filter-label">今日の気分</span>
+            <div class="pill-group" id="goalPills">
+              <button class="pill active" data-val="balance">おまかせ</button>
+              <button class="pill" data-val="weakness">弱点をつぶす</button>
+              <button class="pill" data-val="exercise">じっくり演習</button>
+              <button class="pill" data-val="input">サクッと情報収集</button>
+            </div>
+          </div>
         </div>
 
-        <!-- クエスト提示カード (通常時) -->
+        <!-- クエスト提示カード -->
         <div class="quest-hero-card" id="questHeroCard">
           <div class="quest-tags">
-            <span class="tag tag-cat" id="heroCategory">支援士</span>
-            <span class="tag tag-type" id="heroType">過去問を解く</span>
-            <span class="tag tag-time" id="heroTime">⏱️ 20分</span>
-            <span class="tag tag-source" id="heroDecisionSource">判定: ルール</span>
+            <span class="tag tag-cat" id="heroCategory">-</span>
+            <span class="tag tag-type" id="heroType">-</span>
+            <span class="tag tag-time" id="heroTime">-</span>
+            <span class="tag tag-source" id="heroDecisionSource">-</span>
           </div>
 
           <h2 class="quest-hero-title" id="heroTitle">クエストを読み込み中...</h2>
@@ -76,182 +105,166 @@
               <p id="heroReason">-</p>
             </div>
             <div class="summary-item">
-              <span class="summary-label">✅ 今日の完了条件</span>
+              <span class="summary-label">✅ 完了の目安</span>
               <p id="heroCriteria">-</p>
             </div>
           </div>
+          <p class="decision-note" id="heroDecisionNote"></p>
 
           <div class="quest-card-footer">
-            <button class="btn btn-secondary btn-sm" id="btnChangeQuest">別のクエストを選ぶ ▾</button>
-            <button class="btn btn-primary btn-lg" id="btnStartHero">▶ クエストを開始する</button>
+            <button class="btn btn-secondary" id="btnChangeQuest">ほかの候補を見る</button>
+            <button class="btn btn-primary btn-lg" id="btnStartHero">▶ このクエストを始める</button>
           </div>
         </div>
 
-        <!-- クエスト実行モード (開始時に展開) -->
-        <div class="quest-run-card" id="questRunCard" style="display:none;">
+        <!-- クエスト実行 -->
+        <div class="quest-run-card" id="questRunCard" hidden>
           <div class="run-header">
             <div>
-              <span class="tag tag-cat" id="runCatTag">支援士</span>
-              <span class="tag tag-time" id="runTimeTag">20分</span>
+              <span class="tag tag-cat" id="runCatTag">-</span>
+              <span class="tag tag-type" id="runTypeTag">-</span>
               <h2 class="run-title" id="runTitle">-</h2>
             </div>
             <div class="timer-widget">
               <span class="timer-clock" id="timerClock">20:00</span>
-              <button class="btn-icon" id="btnTimerPlayPause">⏸</button>
+              <button class="btn-icon" id="btnTimerPlayPause" title="一時停止 / 再開">⏸</button>
             </div>
           </div>
+          <div class="timer-bar"><div class="timer-bar-fill" id="timerBarFill"></div></div>
 
-          <!-- 設問・作業指示 (解説なし) -->
+          <ol class="run-steps">
+            <li>下の設問・作業内容を読む（解説はまだ見せません）</li>
+            <li>答案やメモを書く</li>
+            <li>自己採点して保存 → Jev が理解度と復習の要否を判断</li>
+          </ol>
+
           <div class="run-instruction-box">
-            <span class="box-label">📋 作業内容 / 設問文（※解説は解き終わるまで伏せています）</span>
+            <span class="box-label">📋 設問 / 作業内容</span>
             <div class="box-content" id="runPrompt">-</div>
           </div>
 
-          <!-- 答案・メモ入力 -->
           <div class="run-input-group">
-            <label for="inputAnswer" class="input-label">あなたの答案 / 気付きメモ <span class="req">*</span></label>
-            <textarea id="inputAnswer" rows="4" placeholder="設問の字数制限や要求事項を意識して入力してください。"></textarea>
+            <label for="inputAnswer" class="input-label">あなたの答案 / メモ <span class="req">*</span></label>
+            <textarea id="inputAnswer" class="simple-input" rows="5" placeholder="字数制限や設問の要求を意識して書きましょう。キャッチアップなら、やったこと・気付きを1点以上。"></textarea>
+            <div class="char-count" id="answerCharCount">0 文字</div>
           </div>
 
-          <!-- 自己採点・誤答分析 -->
           <div class="run-eval-section">
             <div class="eval-row">
-              <span class="input-label">採点・結果:</span>
+              <span class="input-label">自己採点</span>
               <div class="pill-group" id="evalPills">
-                <button class="pill active" data-val="true">⭕ 正解 / 達成</button>
-                <button class="pill" data-val="false">❌ 誤答 / 要復習</button>
+                <button class="pill active" data-val="true">⭕ できた</button>
+                <button class="pill" data-val="false">❌ できなかった</button>
               </div>
             </div>
 
-            <!-- 誤答時のみ出現する原因ボタン -->
-            <div class="mistake-drawer" id="mistakeDrawer" style="display:none;">
-              <span class="input-label" style="color:#f87171;">誤答の原因は何ですか？（次回の再挑戦に直結します）</span>
+            <div class="mistake-drawer" id="mistakeDrawer" hidden>
+              <span class="input-label warn">つまずいた原因は？（次の再挑戦クエストに使われます）</span>
               <div class="pill-group" id="mistakePills">
                 <button class="pill active" data-val="読み落とし">読み落とし</button>
                 <button class="pill" data-val="知識不足">知識不足</button>
                 <button class="pill" data-val="設問要求とのずれ">設問要求とのずれ</button>
                 <button class="pill" data-val="時間不足">時間不足</button>
               </div>
-              <input type="text" id="inputMistakeDetail" class="simple-input" placeholder="具体的に何が足りなかったか（例: CookieのHttpOnly属性とSecure属性の混同）" style="margin-top:8px;">
+              <input type="text" id="inputMistakeDetail" class="simple-input mt-8" placeholder="具体的に（例: HttpOnly と Secure 属性を混同した）">
             </div>
           </div>
 
           <div class="run-card-footer">
-            <button class="btn btn-outline" id="btnCancelRun">中断して戻る</button>
-            <button class="btn btn-primary btn-lg" id="btnCompleteQuest">結果を保存して完了 ✅</button>
+            <button class="btn btn-outline" id="btnCancelRun">中断する</button>
+            <button class="btn btn-primary btn-lg" id="btnCompleteQuest">保存して完了 ✅</button>
           </div>
         </div>
 
-        <!-- 完了トースト / メッセージ -->
-        <div class="completion-banner" id="completionBanner" style="display:none;">
+        <!-- 完了 -->
+        <div class="completion-banner" id="completionBanner" hidden>
           <div class="completion-badge">🎉 クエスト完了</div>
-          <h3 id="compTitle">お疲れ様でした！</h3>
+          <h3 id="compTitle">お疲れさまでした！</h3>
           <p id="compMessage"></p>
           <div class="comp-eval-tags">
             <span class="comp-tag" id="compScoreTag">理解度: -</span>
             <span class="comp-tag" id="compReviewTag">復習: -</span>
-            <span class="comp-tag" id="compSourceTag">判定元: -</span>
+            <span class="comp-tag" id="compSourceTag">判定: -</span>
+          </div>
+          <div class="answer-notes" id="compAnswerNotes" hidden>
+            <span class="box-label">💡 登録しておいた解答ポイント</span>
+            <div class="box-content" id="compAnswerNotesText"></div>
           </div>
           <button class="btn btn-primary" id="btnCompNext">次のクエストへ</button>
         </div>
       </section>
 
-      <!-- ================= 2. 弱点・復習 ================= -->
+      <!-- ================= 2. 復習 ================= -->
       <section id="view-review" class="view-panel">
         <div class="panel-header">
-          <h2>弱点克服 & 復習リスト</h2>
-          <p class="panel-sub">誤答した支援士の過去問などを、解説なしで再挑戦します。</p>
+          <h2>復習・再挑戦</h2>
+          <p class="panel-sub">できなかった問題を、解説を見ずにもう一度解きます。正解すると「克服済み」になりリストから消えます。</p>
         </div>
 
-        <!-- 再挑戦リスト -->
-        <div class="review-items-container" id="reviewItemsContainer">
-          <!-- 動的挿入 -->
+        <div class="review-items-container" id="reviewItemsContainer"></div>
+
+        <div class="card">
+          <h3 class="card-heading">📊 つまずきの傾向</h3>
+          <div class="mistake-counts-row" id="mistakeCountsRow"></div>
         </div>
 
-        <!-- 誤答原因のサマリー -->
-        <div class="mistake-summary-card">
-          <h3>📊 あなたの誤答の傾向</h3>
-          <div class="mistake-counts-row" id="mistakeCountsRow">
-            <!-- 動的挿入 -->
-          </div>
+        <div class="card">
+          <h3 class="card-heading">🗂 最近の学習記録</h3>
+          <div class="history-list" id="historyList"></div>
         </div>
       </section>
 
-      <!-- ================= 3. 設定 & 素材登録 ================= -->
-      <section id="view-settings" class="view-panel">
+      <!-- ================= 3. 素材を登録 ================= -->
+      <section id="view-register" class="view-panel">
         <div class="panel-header">
-          <h2>設定 & 学習素材の登録</h2>
-          <p class="panel-sub">Jev (判断AI) の設定や、支援士過去問・技術記事の登録を行います。</p>
+          <h2>学習素材を登録</h2>
+          <p class="panel-sub">登録した素材の中から、Jev が毎日のクエストを選びます。</p>
         </div>
 
-        <!-- Jev設定カード -->
-        <div class="card settings-box">
-          <div class="card-title-row">
-            <h3>🤖 Jev (判断特化AI) 設定</h3>
-            <span class="status-indicator-tag" id="jevStatusTag">未設定 (ルール動作)</span>
-          </div>
-          <p class="text-desc">
-            Jevは文章生成を行わず、<strong>クエスト選択 (Choice)</strong>、<strong>理解度評価 (Score)</strong>、<strong>復習要否 (Noul)</strong> の判断のみを行うAIです。
-            <br><span style="color:#10b981;">※APIキーが未設定でも、アプリ内のルールベース提案で全機能が無料で快適に動きます。</span>
-          </p>
-
-          <div class="form-row" style="margin-top:14px;">
-            <label class="input-label" for="txtJevKey">JEV_API_KEY (TypeSafe AI)</label>
-            <div class="key-input-row">
-              <input type="password" id="txtJevKey" class="simple-input" placeholder="jev_... または 未設定のまま利用">
-              <button class="btn btn-secondary" id="btnSaveJevKey">キー保存</button>
-              <button class="btn btn-primary" id="btnTestJev">⚡ 接続テスト</button>
-            </div>
-            <div class="jev-test-result" id="jevTestResult" style="display:none;"></div>
-          </div>
-        </div>
-
-        <!-- 新しい学習素材の登録 -->
-        <div class="card settings-box">
-          <h3>📝 新しい学習素材を登録する</h3>
-          <div class="subtab-row">
+        <div class="card">
+          <div class="subtab-row" role="tablist">
             <button class="subtab active" data-sub="sub-sc">支援士 過去問</button>
-            <button class="subtab" data-sub="sub-cu">AI / クラウド / セキュリティ 記事</button>
+            <button class="subtab" data-sub="sub-cu">AI / クラウド / セキュリティ記事</button>
           </div>
 
-          <!-- 支援士登録フォーム -->
+          <!-- 支援士 -->
           <form id="formSimpleSC" class="simple-form active">
-            <p class="text-desc">※過去問本文は同梱せず、出典とご自身が解きたい設問・答案ポイントを登録します。</p>
+            <p class="text-desc">著作権保護のため問題本文は同梱していません。出典と、解きたい設問を登録してください。</p>
             <div class="form-row">
-              <label class="input-label">問題名 / テーマ <span class="req">*</span></label>
+              <label class="input-label" for="inScTitle">問題名 / テーマ <span class="req">*</span></label>
               <input type="text" id="inScTitle" class="simple-input" required placeholder="例: 令和5年秋期 科目B 問1 (Webセキュリティ)">
             </div>
             <div class="form-row-2col">
               <div>
-                <label class="input-label">出典 <span class="req">*</span></label>
-                <input type="text" id="inScSource" class="simple-input" required placeholder="例: IPA過去問 令和5年秋期">
+                <label class="input-label" for="inScSource">出典 <span class="req">*</span></label>
+                <input type="text" id="inScSource" class="simple-input" required placeholder="例: IPA 過去問 令和5年秋期">
               </div>
               <div>
-                <label class="input-label">時期 / 公開日</label>
+                <label class="input-label" for="inScDate">実施日</label>
                 <input type="date" id="inScDate" class="simple-input">
               </div>
             </div>
             <div class="form-row">
-              <label class="input-label">設問文（あなたが解くべき問い） <span class="req">*</span></label>
-              <textarea id="inScQuestion" class="simple-input" rows="3" required placeholder="例: 設問1: ECサイトでCookie窃取を防ぐために設定すべきCookie属性とその理由を40字以内で述べよ。"></textarea>
+              <label class="input-label" for="inScQuestion">設問文 <span class="req">*</span></label>
+              <textarea id="inScQuestion" class="simple-input" rows="3" required placeholder="例: 設問1: Cookie窃取を防ぐために設定すべき属性とその理由を40字以内で述べよ。"></textarea>
             </div>
             <div class="form-row">
-              <label class="input-label">解答ポイント・メモ (※演習前には表示されません)</label>
-              <input type="text" id="inScNotes" class="simple-input" placeholder="HttpOnlyとSecure属性の違い。XSS対策。">
+              <label class="input-label" for="inScNotes">解答ポイント（解き終わるまで表示されません）</label>
+              <input type="text" id="inScNotes" class="simple-input" placeholder="例: HttpOnly属性。XSSによるCookie読み取りを防ぐ。">
             </div>
-            <button type="submit" class="btn btn-primary">支援士の過去問を登録 💾</button>
+            <button type="submit" class="btn btn-primary">過去問を登録</button>
           </form>
 
-          <!-- キャッチアップ登録フォーム -->
+          <!-- キャッチアップ -->
           <form id="formSimpleCU" class="simple-form">
-            <p class="text-desc">※「読んだ」で終わらせず、必ず具体的な<strong>次の行動</strong>を1点付けます。</p>
+            <p class="text-desc">「読んだ」で終わらせないために、<strong>次の行動</strong>を1つ決めて登録します。</p>
             <div class="form-row">
-              <label class="input-label">記事・発表タイトル <span class="req">*</span></label>
-              <input type="text" id="inCuTitle" class="simple-input" required placeholder="例: LLMアプリケーション向けガードレール設計ガイド">
+              <label class="input-label" for="inCuTitle">記事・発表タイトル <span class="req">*</span></label>
+              <input type="text" id="inCuTitle" class="simple-input" required placeholder="例: LLMアプリ向けガードレール設計ガイド">
             </div>
             <div class="form-row-2col">
               <div>
-                <label class="input-label">分野 <span class="req">*</span></label>
+                <label class="input-label" for="inCuCat">分野 <span class="req">*</span></label>
                 <select id="inCuCat" class="simple-input">
                   <option value="ai">AI</option>
                   <option value="cloud">クラウド</option>
@@ -259,53 +272,124 @@
                 </select>
               </div>
               <div>
-                <label class="input-label">出典 / メディア <span class="req">*</span></label>
-                <input type="text" id="inCuSource" class="simple-input" required placeholder="例: AWS公式ブログ / IPA注意喚起">
+                <label class="input-label" for="inCuSource">出典 / メディア <span class="req">*</span></label>
+                <input type="text" id="inCuSource" class="simple-input" required placeholder="例: AWS 公式ブログ">
               </div>
             </div>
             <div class="form-row">
-              <label class="input-label">👉 次の行動（必須） <span class="req">*</span></label>
-              <select id="inCuAction" class="simple-input" style="border-color:#3b82f6;font-weight:700;">
-                <option value="試す">🧪 試す（ハンズオンやコードで動かす）</option>
-                <option value="設定を確認する">⚙️ 設定を確認する（既存のシステム設定と照合する）</option>
-                <option value="既存知識と比較する">🧠 既存知識と比較する（過去の標準指針と対比する）</option>
-                <option value="チーム向けに説明する">🗣️ チーム向けに説明する（要点を3分で伝えられる形式に整理）</option>
+              <label class="input-label" for="inCuUrl">URL</label>
+              <input type="url" id="inCuUrl" class="simple-input" placeholder="https://...">
+            </div>
+            <div class="form-row">
+              <label class="input-label" for="inCuAction">次の行動 <span class="req">*</span></label>
+              <select id="inCuAction" class="simple-input">
+                <option value="試す">🧪 試す（手を動かして確認）</option>
+                <option value="設定を確認する">⚙️ 設定を確認する（自分の環境と照合）</option>
+                <option value="既存知識と比較する">🧠 既存知識と比較する</option>
+                <option value="チーム向けに説明する">🗣️ チーム向けに説明する（3分で話せる形に）</option>
               </select>
             </div>
             <div class="form-row">
-              <label class="input-label">要点メモ / URL</label>
-              <input type="text" id="inCuNotes" class="simple-input" placeholder="プロンプトインジェクション検知ルール https://...">
+              <label class="input-label" for="inCuNotes">要点メモ</label>
+              <input type="text" id="inCuNotes" class="simple-input" placeholder="例: プロンプトインジェクション検知ルールの整理">
             </div>
-            <button type="submit" class="btn btn-primary">キャッチアップ情報を登録 💾</button>
+            <button type="submit" class="btn btn-primary">記事を登録</button>
           </form>
         </div>
 
+        <div class="card">
+          <h3 class="card-heading">📚 登録済みの素材 <span class="count-label" id="itemCount"></span></h3>
+          <div class="item-list" id="itemList"></div>
+        </div>
+      </section>
+
+      <!-- ================= 4. 設定 ================= -->
+      <section id="view-settings" class="view-panel">
+        <div class="panel-header">
+          <h2>設定</h2>
+        </div>
+
+        <!-- Jev 設定 -->
+        <div class="card card-jev" id="jevSettingsCard">
+          <div class="card-title-row">
+            <h3 class="card-heading">🧠 Jev（判断AI）の接続</h3>
+            <span class="status-indicator-tag" id="jevStatusTag">確認中...</span>
+          </div>
+
+          <p class="text-desc">
+            Jev は文章を生成せず、次の3つの<strong>判断だけ</strong>を行います。
+          </p>
+          <ul class="jev-roles">
+            <li><b>Choice</b> 今日のクエストを候補から1つ選ぶ</li>
+            <li><b>Score</b> 答案とメモから理解度を4段階で判定</li>
+            <li><b>Noul</b> 数日後に復習すべきかを判定</li>
+          </ul>
+
+          <div class="key-status" id="keyStatusBox"></div>
+
+          <div class="form-row" id="keyFormRow">
+            <label class="input-label" for="txtJevKey">Jev APIキー</label>
+            <div class="key-input-row">
+              <div class="key-input-wrap">
+                <input type="password" id="txtJevKey" class="simple-input" placeholder="APIキーを貼り付け" autocomplete="off" spellcheck="false">
+                <button class="key-eye" id="btnToggleKey" type="button" title="キーを表示 / 隠す">👁</button>
+              </div>
+              <button class="btn btn-jev" id="btnSaveJevKey">保存して接続テスト</button>
+            </div>
+            <div class="key-sub-actions">
+              <button class="btn btn-ghost btn-sm" id="btnTestJev">保存済みのキーで接続テスト</button>
+              <button class="btn btn-ghost btn-sm danger" id="btnDeleteJevKey">キーを削除</button>
+            </div>
+            <div class="jev-test-result" id="jevTestResult" hidden></div>
+          </div>
+
+          <details class="help-details">
+            <summary>キーの保存場所と安全性</summary>
+            <ul>
+              <li>キーはこのPCの <code>data/config.json</code> にだけ保存され、Git の管理対象外です。</li>
+              <li>ブラウザには先頭と末尾4文字のみ返し、キー全体は表示・ログ出力しません。</li>
+              <li>環境変数 <code>JEV_API_KEY</code> を設定して起動した場合はそちらが優先されます。</li>
+              <li>キーが無効・通信できない場合も、アプリ内ルールに自動で切り替わります。</li>
+            </ul>
+          </details>
+        </div>
+
         <!-- データ管理 -->
-        <div class="card settings-box">
-          <h3>📦 データ管理・サンプル</h3>
-          <p class="text-desc">学習データはローカルの <code>data/store.json</code> に安全に永続化されています。</p>
+        <div class="card">
+          <h3 class="card-heading">📦 データ管理</h3>
+          <p class="text-desc">学習データはこのPCの <code>data/store.json</code> に保存されています（APIキーはバックアップに含まれません）。</p>
           <div class="btn-group-row">
-            <button class="btn btn-secondary btn-sm" id="btnExportJson">JSONバックアップをダウンロード</button>
-            <button class="btn btn-outline btn-sm" id="btnResetSamples">架空サンプルのみ削除</button>
+            <button class="btn btn-secondary btn-sm" id="btnExportJson">バックアップをダウンロード</button>
+            <label class="btn btn-secondary btn-sm file-btn">
+              バックアップから復元
+              <input type="file" id="inImportJson" accept="application/json,.json" hidden>
+            </label>
+          </div>
+          <div class="btn-group-row">
+            <button class="btn btn-outline btn-sm" id="btnAddSamples">サンプルを追加</button>
+            <button class="btn btn-outline btn-sm" id="btnResetSamples">サンプルだけ削除</button>
           </div>
         </div>
+
+        <p class="app-version" id="appVersion"></p>
       </section>
 
     </main>
   </div>
 
-  <!-- クエスト変更用モーダル -->
-  <div class="modal-backdrop" id="questListModal" style="display:none;">
-    <div class="modal-card">
+  <!-- 候補選択モーダル -->
+  <div class="modal-backdrop" id="questListModal" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="questListTitle">
       <div class="modal-header">
-        <h3>ほかのクエストを選ぶ</h3>
-        <button class="btn-close" id="btnCloseQuestList">✕</button>
+        <h3 id="questListTitle">ほかのクエスト候補</h3>
+        <button class="btn-close" id="btnCloseQuestList" aria-label="閉じる">✕</button>
       </div>
-      <div class="modal-body" id="questListBody">
-        <!-- 候補リスト動的挿入 -->
-      </div>
+      <div class="modal-body" id="questListBody"></div>
     </div>
   </div>
+
+  <!-- 通知 -->
+  <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
   <script src="app.js"></script>
 </body>
