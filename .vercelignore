@@ -1,0 +1,5 @@
+# ローカル専用のファイルは Vercel にアップロードしない
+data/
+.env
+*.tmp
+test_verification.js

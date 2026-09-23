@@ -12,7 +12,23 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="app-container">
+  <!-- ログイン画面（クラウド版のみ） -->
+  <div class="auth-screen" id="authScreen" hidden>
+    <div class="auth-card">
+      <span class="brand-logo auth-logo" aria-hidden="true">J</span>
+      <h1 class="auth-title">Jev 学習クエスト</h1>
+      <p class="auth-sub">判断AI Jev が「今日やる1つ」を選ぶ、支援士対策 & 技術キャッチアップ</p>
+      <button class="btn btn-github btn-lg" id="btnLogin" type="button">
+        <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub でログイン
+      </button>
+      <p class="auth-message" id="authMessage" hidden></p>
+      <button class="btn btn-ghost btn-sm" id="btnAuthLogout" type="button" hidden>別のアカウントでログインする</button>
+      <p class="auth-note">許可されたアカウントだけが利用できます。</p>
+    </div>
+  </div>
+
+  <div class="app-container" id="appShell" hidden>
     <!-- ヘッダー -->
     <header class="app-header">
       <div class="header-brand">
@@ -22,10 +38,16 @@
           <p class="brand-sub">判断AI Jev が「今日やる1つ」を選ぶ ─ 支援士対策 & 技術キャッチアップ</p>
         </div>
       </div>
-      <button class="jev-chip" id="jevChip" type="button" title="Jev の接続設定を開く">
-        <span class="jev-chip-dot"></span>
-        <span id="jevChipText">Jev 確認中...</span>
-      </button>
+      <div class="header-actions">
+        <button class="jev-chip" id="jevChip" type="button" title="Jev の接続設定を開く">
+          <span class="jev-chip-dot"></span>
+          <span id="jevChipText">Jev 確認中...</span>
+        </button>
+        <div class="user-menu" id="userMenu" hidden>
+          <span class="user-email" id="userEmail"></span>
+          <button class="btn btn-ghost btn-sm" id="btnLogout" type="button">ログアウト</button>
+        </div>
+      </div>
     </header>
 
     <nav class="header-nav" aria-label="メインメニュー">
@@ -327,6 +349,16 @@
 
           <div class="key-status" id="keyStatusBox"></div>
 
+          <div class="cloud-key-help" id="cloudKeyHelp" hidden>
+            <p>クラウド版では、APIキーを <strong>Vercel の環境変数 <code>JEV_API_KEY</code></strong> で管理します（ブラウザやデータベースには保存しません）。</p>
+            <ol>
+              <li>Vercel のプロジェクト → Settings → Environment Variables を開く</li>
+              <li><code>JEV_API_KEY</code> にキーを登録（Sensitive を有効に）</li>
+              <li>Deployments から Redeploy する</li>
+            </ol>
+            <button class="btn btn-ghost btn-sm" id="btnTestJevCloud">接続テスト</button>
+          </div>
+
           <div class="form-row" id="keyFormRow">
             <label class="input-label" for="txtJevKey">Jev APIキー</label>
             <div class="key-input-row">
@@ -340,10 +372,10 @@
               <button class="btn btn-ghost btn-sm" id="btnTestJev">保存済みのキーで接続テスト</button>
               <button class="btn btn-ghost btn-sm danger" id="btnDeleteJevKey">キーを削除</button>
             </div>
-            <div class="jev-test-result" id="jevTestResult" hidden></div>
           </div>
+          <div class="jev-test-result" id="jevTestResult" hidden></div>
 
-          <details class="help-details">
+          <details class="help-details" id="localKeyHelp">
             <summary>キーの保存場所と安全性</summary>
             <ul>
               <li>キーはこのPCの <code>data/config.json</code> にだけ保存され、Git の管理対象外です。</li>
@@ -357,7 +389,7 @@
         <!-- データ管理 -->
         <div class="card">
           <h3 class="card-heading">📦 データ管理</h3>
-          <p class="text-desc">学習データはこのPCの <code>data/store.json</code> に保存されています（APIキーはバックアップに含まれません）。</p>
+          <p class="text-desc" id="dataLocationText">学習データはこのPCの <code>data/store.json</code> に保存されています（APIキーはバックアップに含まれません）。</p>
           <div class="btn-group-row">
             <button class="btn btn-secondary btn-sm" id="btnExportJson">バックアップをダウンロード</button>
             <label class="btn btn-secondary btn-sm file-btn">
