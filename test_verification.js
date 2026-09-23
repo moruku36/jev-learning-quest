@@ -187,35 +187,179 @@ async function runVerification() {
   assert.strictEqual(badJson.status, 400);
   console.log('✔ JSON以外のPOST拒否 / CORS無効 / public外のファイル非公開 / 不正JSONは400');
 
-  console.log('\n=========================================');
-  console.log('🎉 すべての自動検証をパスしました');
-  console.log('=========================================');
+  const { SECURITY_HEADERS } = require('./lib/security');
+  for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
+    assert.strictEqual(statusRes.headers.get(key), value, `${key} ヘッダー`);
+  }
+  const vercel = JSON.parse(fs.readFileSync(path.join(__dirname, 'vercel.json'), 'utf8'));
+  const vercelHeaders = Object.fromEntries(vercel.headers.find(h => h.source === '/(.*)').headers.map(h => [h.key, h.value]));
+  assert.deepStrictEqual(vercelHeaders, SECURITY_HEADERS, 'vercel.json のセキュリティヘッダーが lib/security.js と一致');
+  console.log('✔ セキュリティヘッダー (CSP / HSTS / X-Frame-Options など) がローカル・Vercel で同一');
 }
 
-let serverProc;
-mockJev.listen(MOCK_PORT, '127.0.0.1', async () => {
-  serverProc = spawn(process.execPath, [path.join(__dirname, 'server.js')], {
-    env: {
-      ...process.env,
-      PORT: String(PORT),
-      LQ_DATA_DIR: dataDir,
-      JEV_API_KEY: '',
-      JEV_API_URL: `http://127.0.0.1:${MOCK_PORT}/v1/systemone`
-    },
+// --- クラウド版 (Supabase) のモック ---
+// 本物の Supabase と同じく「トークンの持ち主」と「許可リスト」で行レベルのアクセスを制限する
+const SB_ANON_KEY = 'sb_publishable_test_anon_key';
+const SB_USERS = {
+  'token-alice': { id: 'u-alice', email: 'Alice@Example.com' },
+  'token-mallory': { id: 'u-mallory', email: 'mallory@example.com' }
+};
+const SB_ALLOWED = new Set(['alice@example.com']);
+const sbRows = new Map(); // user_id -> data
+
+const mockSupabase = http.createServer((req, res) => {
+  const u = new URL(req.url, 'http://x');
+  const user = SB_USERS[(req.headers.authorization || '').replace('Bearer ', '')];
+  const send = (status, obj) => {
+    res.writeHead(status, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(obj));
+  };
+  if (req.headers.apikey !== SB_ANON_KEY) return send(401, { message: 'invalid apikey' });
+  if (!user) return send(401, { message: 'invalid JWT' });
+  const allowed = SB_ALLOWED.has(user.email.toLowerCase());
+
+  let body = '';
+  req.on('data', c => { body += c; });
+  req.on('end', () => {
+    if (u.pathname === '/auth/v1/user') return send(200, user);
+    if (u.pathname === '/rest/v1/allowed_users') {
+      const email = (u.searchParams.get('email') || '').replace('eq.', '');
+      // RLS: 自分のメールアドレスの行だけ見える
+      return send(200, allowed && email === user.email.toLowerCase() ? [{ email }] : []);
+    }
+    if (u.pathname === '/rest/v1/user_data' && req.method === 'GET') {
+      const id = (u.searchParams.get('user_id') || '').replace('eq.', '');
+      return send(200, allowed && id === user.id && sbRows.has(id) ? [{ data: sbRows.get(id) }] : []);
+    }
+    if (u.pathname === '/rest/v1/user_data' && req.method === 'POST') {
+      const row = JSON.parse(body);
+      if (!allowed || row.user_id !== user.id) return send(403, { message: 'new row violates row-level security policy' });
+      sbRows.set(row.user_id, row.data);
+      res.writeHead(201);
+      return res.end();
+    }
+    send(404, {});
+  });
+});
+
+async function runCloudVerification(base) {
+  const call = async (p, { token, body, method } = {}) => {
+    const headers = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    const res = await fetch(base + p, { method: method || (body !== undefined ? 'POST' : 'GET'), headers, body: body !== undefined ? JSON.stringify(body) : undefined });
+    return { status: res.status, data: await res.json().catch(() => ({})) };
+  };
+
+  console.log('\n=== [8] クラウド版: 公開設定 ===');
+  const config = await call('/api/config');
+  assert.strictEqual(config.data.mode, 'cloud');
+  assert.strictEqual(config.data.supabaseAnonKey, SB_ANON_KEY);
+  assert.ok(!JSON.stringify(config.data).includes(VALID_KEY), 'Jev キーはブラウザに渡さない');
+  console.log('✔ ブラウザには Supabase の公開情報だけを渡し、Jev キーは渡さない');
+
+  console.log('\n=== [9] クラウド版: ログインと許可リスト ===');
+  assert.strictEqual((await call('/api/status')).status, 401);
+  assert.strictEqual((await call('/api/history', { token: 'forged-token' })).status, 401);
+  const mallory = await call('/api/registered-items', { token: 'token-mallory' });
+  assert.strictEqual(mallory.status, 403);
+  assert.match(mallory.data.error, /許可されていません/);
+  console.log('✔ 未ログイン・偽トークンは 401、許可リスト外のユーザーは 403');
+
+  const status = await call('/api/status', { token: 'token-alice' });
+  assert.strictEqual(status.status, 200);
+  assert.strictEqual(status.data.user.email, 'Alice@Example.com');
+  assert.strictEqual(status.data.keySource, 'env');
+  assert.strictEqual(status.data.keyEditable, false);
+  console.log('✔ 許可されたユーザーはログインでき、Jev キーは環境変数から読み込まれる');
+
+  console.log('\n=== [10] クラウド版: データ保存と Jev ===');
+  const reg = await call('/api/registered-items', {
+    token: 'token-alice',
+    body: { type: 'catchup', category: 'ai', title: 'クラウド版テスト記事', source: 'テスト', url: 'javascript:alert(1)' }
+  });
+  assert.strictEqual(reg.status, 201);
+  assert.strictEqual(reg.data.item.url, '', 'javascript: URL は保存しない');
+  assert.ok(sbRows.get('u-alice').items.some(i => i.title === 'クラウド版テスト記事'), 'Supabase のユーザー本人の行に保存');
+  assert.ok(!sbRows.has('u-mallory'));
+  const rec = await call('/api/quest/recommend', { token: 'token-alice', body: { minutes: 20, category: 'all' } });
+  assert.strictEqual(rec.data.decisionSource, 'jev');
+  console.log('✔ データはユーザー本人の行に保存され、Jev がクエストを選ぶ');
+
+  const setKey = await call('/api/settings/jev-key', { token: 'token-alice', body: { apiKey: 'jev_other' } });
+  assert.strictEqual(setKey.status, 409);
+  const testOther = await call('/api/settings/test-jev', { token: 'token-alice', body: { apiKey: 'jev_wrong_key_000000' } });
+  assert.strictEqual(testOther.data.success, true, '入力されたキーは無視し、環境変数のキーだけをテストする');
+  console.log('✔ クラウド版では画面からキーを変更できず、任意のキーでの外部呼び出しもできない');
+}
+
+async function runMisconfiguredVerification(base) {
+  console.log('\n=== [11] クラウド版: 設定不足時は安全側に倒す ===');
+  const config = await (await fetch(`${base}/api/config`)).json();
+  assert.strictEqual(config.mode, 'cloud');
+  assert.match(config.configError, /SUPABASE_URL/);
+  const res = await fetch(`${base}/api/registered-items`);
+  assert.strictEqual(res.status, 503);
+  console.log('✔ Supabase 未設定の Vercel 環境では、ログインなしで使えてしまうことはなく全 API が 503');
+}
+
+function startServer(port, env) {
+  const proc = spawn(process.execPath, [path.join(__dirname, 'server.js')], {
+    env: { ...process.env, PORT: String(port), JEV_API_URL: `http://127.0.0.1:${MOCK_PORT}/v1/systemone`, ...env },
     stdio: ['ignore', 'ignore', 'inherit']
   });
+  return proc;
+}
+
+async function waitFor(base) {
+  for (let i = 0; i < 50; i++) {
+    try {
+      await fetch(`${base}/api/config`);
+      return;
+    } catch (e) {
+      await new Promise(r => setTimeout(r, 100));
+    }
+  }
+  throw new Error(`サーバーが起動しませんでした: ${base}`);
+}
+
+const MOCK_SB_PORT = 3997;
+const CLOUD_PORT = 3996;
+const BROKEN_PORT = 3995;
+const procs = [];
+
+mockJev.listen(MOCK_PORT, '127.0.0.1', () => mockSupabase.listen(MOCK_SB_PORT, '127.0.0.1', async () => {
+  const clearCloudEnv = { SUPABASE_URL: '', SUPABASE_ANON_KEY: '', VERCEL: '' };
+  procs.push(startServer(PORT, { ...clearCloudEnv, LQ_DATA_DIR: dataDir, JEV_API_KEY: '' }));
+  procs.push(startServer(CLOUD_PORT, {
+    SUPABASE_URL: `http://127.0.0.1:${MOCK_SB_PORT}`,
+    SUPABASE_ANON_KEY: SB_ANON_KEY,
+    LQ_ALLOW_INSECURE_SUPABASE: '1',
+    JEV_API_KEY: VALID_KEY,
+    VERCEL: ''
+  }));
+  procs.push(startServer(BROKEN_PORT, { ...clearCloudEnv, VERCEL: '1', JEV_API_KEY: '' }));
 
   let exitCode = 0;
   try {
     await waitForServer();
     await runVerification();
+    await waitFor(`http://127.0.0.1:${CLOUD_PORT}`);
+    await runCloudVerification(`http://127.0.0.1:${CLOUD_PORT}`);
+    await waitFor(`http://127.0.0.1:${BROKEN_PORT}`);
+    await runMisconfiguredVerification(`http://127.0.0.1:${BROKEN_PORT}`);
+
+    console.log('\n=========================================');
+    console.log('🎉 すべての自動検証をパスしました');
+    console.log('=========================================');
   } catch (err) {
     console.error('❌ 検証失敗:', err);
     exitCode = 1;
   } finally {
-    serverProc.kill();
+    procs.forEach(p => p.kill());
     mockJev.close();
+    mockSupabase.close();
     fs.rmSync(dataDir, { recursive: true, force: true });
     process.exit(exitCode);
   }
-});
+}));
