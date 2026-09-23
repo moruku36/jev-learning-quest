@@ -1728,7 +1728,7 @@ kbd {
 
 .quiz-start-form {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 10px;
   margin-bottom: 14px;
 }
@@ -1812,6 +1812,281 @@ kbd {
 
   .reading-row,
   .quiz-review-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* ===== 4択・報告 ===== */
+.quiz-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.quiz-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-main);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.quiz-choice:hover:not(:disabled) {
+  border-color: var(--accent-blue);
+  background: var(--bg-card-hover);
+}
+
+.quiz-choice:disabled {
+  cursor: default;
+  opacity: 0.75;
+}
+
+.quiz-choice.correct {
+  border-color: var(--accent-green);
+  background: #064e3b;
+  opacity: 1;
+}
+
+.quiz-choice.wrong {
+  border-color: var(--accent-red);
+  background: #450a0a;
+  opacity: 1;
+}
+
+.choice-no {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: #93c5fd;
+}
+
+.quiz-next {
+  margin-bottom: 8px;
+}
+
+.quiz-next .btn {
+  width: 100%;
+}
+
+.quiz-answer-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-top: 8px;
+  font-family: inherit;
+  font-size: 12.5px;
+  color: #fbbf24;
+  cursor: pointer;
+}
+
+.link-btn:hover {
+  text-decoration: underline;
+}
+
+.quiz-report-form {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr auto;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/* ===== 記述式の採点補助・添削 ===== */
+.written-extra {
+  background: #0f172a;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 18px;
+}
+
+.field-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 6px;
+  line-height: 1.6;
+}
+
+.field-hint .run-link {
+  margin-top: 0;
+}
+
+.keyword-rate {
+  font-size: 13px;
+  color: #f1f5f9;
+  margin-bottom: 8px;
+}
+
+.keyword-chips {
+  text-align: left;
+}
+
+.kw-chip {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  margin: 0 6px 6px 0;
+}
+
+.kw-chip.ok {
+  background: #064e3b;
+  color: #a7f3d0;
+}
+
+.kw-chip.ng {
+  background: #450a0a;
+  color: #fecaca;
+}
+
+.comp-links {
+  margin-bottom: 8px;
+}
+
+.review-result {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #115e59;
+  font-size: 13.5px;
+}
+
+/* ===== 分野別の正答率・報告 ===== */
+.field-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.field-name small {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.field-row.weak .field-name {
+  color: #fbbf24;
+  font-weight: 700;
+}
+
+.field-bar {
+  height: 8px;
+  background: #1e293b;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.field-bar div {
+  width: 0;
+  height: 100%;
+  background: var(--accent-green);
+}
+
+.field-row.weak .field-bar div {
+  background: var(--accent-amber);
+}
+
+.field-pct {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  min-width: 90px;
+  text-align: right;
+}
+
+.field-pct small {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.report-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.report-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.report-row:last-child {
+  border-bottom: none;
+}
+
+.report-q {
+  font-weight: 700;
+  font-size: 13.5px;
+}
+
+.report-a,
+.report-note {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+/* ===== オフライン ===== */
+.offline-chip {
+  font-size: 12px;
+  font-weight: 700;
+  color: #fde68a;
+  background: #422006;
+  border: 1px solid #92400e;
+  border-radius: 999px;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
+.offline-banner {
+  border-color: #92400e;
+  background: linear-gradient(135deg, #422006 0%, #1e293b 100%);
+}
+
+@media (max-width: 640px) {
+  .quiz-report-form {
+    grid-template-columns: 1fr;
+  }
+
+  .field-row {
+    grid-template-columns: 1fr auto;
+  }
+
+  .field-bar {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .report-row {
     flex-direction: column;
     align-items: stretch;
   }

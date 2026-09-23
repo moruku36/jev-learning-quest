@@ -1,6 +1,6 @@
 {
   "name": "jev-learning-quest",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "判断AI Jev が「今日やる1つ」を選ぶ学習Webアプリ「Jev 学習クエスト」（Vercel + Supabase / ローカル両対応）",
   "main": "server.js",
   "scripts": {
@@ -20,5 +20,8 @@
   "license": "MIT",
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0"
   }
 }

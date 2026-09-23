@@ -64,6 +64,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   initAuthButtons();
   initQuiz();
   initLibrary();
+  initOffline();
+  registerServiceWorker();
 
   const ready = await initAuth();
   if (ready) await startApp();
@@ -72,9 +74,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function startApp() {
   setHidden('authScreen', true);
   setHidden('appShell', false);
+  STATE.offline = false;
+  updateOfflineUi();
   await checkJevStatus();
   await loadRecommendedQuest();
   await updateReviewBadge();
+  // オフラインで解いた結果を送り、次のオフラインに備えて問題を取っておく
+  await flushPendingQuizResults();
+  refreshOfflineDeck();
 }
 
 // --- 認証 (クラウド版のみ) ---
@@ -107,6 +114,11 @@ async function initAuth() {
     const res = await fetch('/api/config');
     config = await res.json();
   } catch (e) {
+    // 通信できないときは、保存しておいた一問一答だけ使えるオフラインモードにする
+    if (loadOfflineDeck().length > 0) {
+      enterOfflineMode();
+      return false;
+    }
     showAuthScreen('サーバーに接続できませんでした。時間をおいて再度お試しください。');
     return false;
   }
@@ -464,6 +476,15 @@ function startQuestRun(quest) {
     promptBox.textContent = `【やること】\n${quest.nextAction || '実務への影響を整理する'}\n\n【対象】\n${quest.title}\n\n【要点メモ】\n${quest.notes || '公式資料を確認し、実務での活用と次の行動をまとめてください。'}`;
   }
 
+  // 記述式（過去問）はキーワード照合・設問の貼り付け欄を出す
+  const isWritten = quest.type === '過去問を解く' || (quest.type === '誤答を直す' && !quest.focus);
+  setHidden('writtenExtra', !isWritten);
+  document.getElementById('inputKeywords').value = quest.keywords || '';
+  document.getElementById('inputQuestionText').value = '';
+  const answerLink = document.getElementById('runAnswerLink');
+  answerLink.hidden = !quest.answerUrl;
+  if (quest.answerUrl) answerLink.href = quest.answerUrl;
+
   const answer = document.getElementById('inputAnswer');
   answer.value = '';
   updateCharCount();
@@ -495,6 +516,7 @@ function initRunMode() {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleCompleteQuest();
   });
   document.getElementById('btnCompleteQuest').addEventListener('click', handleCompleteQuest);
+  document.getElementById('btnClaudeReview').addEventListener('click', requestClaudeReview);
 }
 
 function updateCharCount() {
@@ -586,7 +608,9 @@ async function handleCompleteQuest() {
     userAnswer: ans,
     isCorrect: STATE.isCorrect,
     mistakeReason: STATE.isCorrect ? '' : STATE.mistakeReason,
-    mistakeDetail: document.getElementById('inputMistakeDetail').value.trim()
+    mistakeDetail: document.getElementById('inputMistakeDetail').value.trim(),
+    keywords: document.getElementById('inputKeywords').value.trim(),
+    questionText: document.getElementById('inputQuestionText').value.trim()
   };
 
   try {
@@ -611,6 +635,7 @@ function renderCompletion(data) {
 
   const ev = data.evaluation || {};
   const byJev = ev.decisionSource === 'jev';
+  document.getElementById('compTitle').textContent = 'お疲れさまでした！';
   document.getElementById('compScoreTag').textContent = `理解度: ${SCORE_LABELS[ev.understandingScore] || ev.understandingScore}`;
   document.getElementById('compReviewTag').textContent = ev.needsReview ? '復習: 数日後にもう一度' : '復習: 不要';
   document.getElementById('compSourceTag').textContent = byJev ? '判定: 🧠 Jev (Score / Noul)' : '判定: 📋 ルール';
@@ -630,8 +655,58 @@ function renderCompletion(data) {
   const notes = data.answerNotes || '';
   setHidden('compAnswerNotes', !notes);
   document.getElementById('compAnswerNotesText').textContent = notes;
+  setHidden('compWrongBox', true);
+
+  // キーワード照合の結果
+  const kw = data.keywordResult;
+  setHidden('compKeywordBox', !kw);
+  if (kw) {
+    document.getElementById('compKeywordChips').innerHTML =
+      `<p class="keyword-rate">${kw.matched.length} / ${kw.matched.length + kw.missing.length} 個のキーワードが答案に含まれています</p>` +
+      kw.matched.map(k => `<span class="kw-chip ok">✔ ${escapeHtml(k)}</span>`).join('') +
+      kw.missing.map(k => `<span class="kw-chip ng">✖ ${escapeHtml(k)}</span>`).join('');
+  }
+
+  // 記述式は解答例へのリンクと Claude の添削
+  const quest = STATE.currentQuest || {};
+  const isWritten = quest.type === '過去問を解く' || (quest.type === '誤答を直す' && !quest.focus);
+  STATE.lastHistoryId = data.history ? data.history.id : null;
+  setHidden('compReviewBox', !isWritten);
+  if (isWritten) {
+    const link = document.getElementById('compAnswerLink');
+    link.hidden = !quest.answerUrl;
+    if (quest.answerUrl) link.href = quest.answerUrl;
+    const configured = Boolean(STATE.jev.reviewConfigured);
+    document.getElementById('btnClaudeReview').disabled = !configured;
+    document.getElementById('claudeReviewHint').textContent = configured
+      ? '答案と、入力した設問文・キーワードを Claude に送って、良い点・改善点・書き方の例を返してもらいます。'
+      : '添削は管理者が環境変数 ANTHROPIC_API_KEY を設定すると使えるようになります。';
+    setHidden('compReviewResult', true);
+  }
 
   document.getElementById('completionBanner').scrollIntoView({ behavior: 'smooth' });
+}
+
+async function requestClaudeReview() {
+  if (!STATE.lastHistoryId) return;
+  const btn = document.getElementById('btnClaudeReview');
+  const box = document.getElementById('compReviewResult');
+  btn.disabled = true;
+  btn.textContent = '🤖 添削中...（30秒ほどかかります）';
+  try {
+    const data = await api('/api/review', { body: { historyId: STATE.lastHistoryId } });
+    if (!data.success) {
+      showToast(data.error || '添削できませんでした', 'error');
+      return;
+    }
+    box.textContent = data.review.feedback;
+    box.hidden = false;
+  } catch (err) {
+    showToast('添削中に通信エラーが発生しました', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🤖 Claude に添削してもらう';
+  }
 }
 
 // --- 5. 復習タブ ---
@@ -778,6 +853,8 @@ function initRegisterForms() {
       publishedDate: document.getElementById('inScDate').value,
       questionText: document.getElementById('inScQuestion').value.trim(),
       notes: document.getElementById('inScNotes').value.trim(),
+      keywords: document.getElementById('inScKeywords').value.trim(),
+      url: document.getElementById('inScUrl').value.trim(),
       nextAction: '既存知識と比較する'
     }, e.target);
   });
@@ -957,11 +1034,28 @@ async function runJevTest(key, { saving = false } = {}) {
 }
 
 // --- 8. 一問一答 ---
+const QUIZ_FORMAT_KEY = 'jlq.quizFormat';
+const OFFLINE_DECK_KEY = 'jlq.offlineDeck';
+const PENDING_RESULTS_KEY = 'jlq.pendingQuizResults';
+const OFFLINE_DECK_SIZE = 60;
+
+// 形式（自己採点 / 4択）は端末ごとに覚えておく
+function preferredQuizFormat() {
+  return storageGet(QUIZ_FORMAT_KEY) === 'choice' ? 'choice' : 'self';
+}
+
 function initQuiz() {
   document.getElementById('btnQuizReveal').addEventListener('click', revealQuizAnswer);
   document.getElementById('btnQuizRight').addEventListener('click', () => judgeQuizCard(true));
   document.getElementById('btnQuizWrong').addEventListener('click', () => judgeQuizCard(false));
+  document.getElementById('btnQuizNext').addEventListener('click', goNextQuizCard);
   document.getElementById('btnQuizQuit').addEventListener('click', quitQuiz);
+  document.getElementById('btnQuizReport').addEventListener('click', () => {
+    const form = document.getElementById('quizReportForm');
+    form.hidden = !form.hidden;
+    if (!form.hidden) document.getElementById('quizReportNote').focus();
+  });
+  document.getElementById('btnQuizReportSend').addEventListener('click', sendQuizReport);
   document.getElementById('btnQuizReview').addEventListener('click', () => {
     switchTab('quest');
     startQuizRun({
@@ -975,12 +1069,25 @@ function initQuiz() {
     });
   });
 
-  // キーボード操作: Space/Enter で答えを表示、Y/→ で覚えてた、N/← でまだ
+  // キーボード操作
+  //   自己採点: Space/Enter で答えを表示、Y/→ で覚えてた、N/← でまだ
+  //   4択: 1〜4 で選択、Enter で次へ
   document.addEventListener('keydown', e => {
     if (!STATE.quiz || document.getElementById('quizRunCard').hidden) return;
     const typing = e.target instanceof Element && e.target.closest('input, textarea, select');
     if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+    const card = STATE.quiz.cards[STATE.quiz.index];
     const revealed = !document.getElementById('quizAnswerBox').hidden;
+    if (card && card.choices) {
+      if (!revealed && /^[1-4]$/.test(e.key)) {
+        e.preventDefault();
+        chooseQuizAnswer(parseInt(e.key, 10) - 1);
+      } else if (revealed && e.key === 'Enter') {
+        e.preventDefault();
+        goNextQuizCard();
+      }
+      return;
+    }
     if (!revealed && (e.key === ' ' || e.key === 'Enter')) {
       e.preventDefault();
       revealQuizAnswer();
@@ -992,21 +1099,41 @@ function initQuiz() {
       judgeQuizCard(false);
     }
   });
+
+  // 報告理由の選択肢（サーバーの定義と同じ）
+  const reasonSelect = document.getElementById('quizReportReason');
+  ['答えが間違っている', '問題文が分かりにくい', '元の過去問と内容が合っていない', 'その他']
+    .forEach(r => reasonSelect.add(new Option(r, r)));
 }
 
 async function startQuizRun(quest) {
-  const params = new URLSearchParams(Object.entries(quest.quiz || {}).map(([k, v]) => [k, String(v)]));
-  const data = await api(`/api/quiz/deck?${params}`);
-  const cards = data.cards || [];
+  const quiz = { format: preferredQuizFormat(), ...(quest.quiz || {}) };
+  let cards;
+  if (STATE.offline) {
+    cards = offlineDeckCards(quiz);
+  } else {
+    try {
+      const params = new URLSearchParams(Object.entries(quiz).map(([k, v]) => [k, String(v)]));
+      const data = await api(`/api/quiz/deck?${params}`);
+      cards = data.cards || [];
+    } catch (err) {
+      // 通信できないときは保存しておいた問題で続ける
+      enterOfflineMode();
+      cards = offlineDeckCards(quiz);
+    }
+  }
   if (cards.length === 0) {
-    const reviewOnly = quest.quiz && quest.quiz.mode === 'review';
-    showToast(reviewOnly ? '復習期限が来た問題はありません' : '出題できる問題がありません（すべて学習済みです）', 'info');
+    const msg = quiz.mode === 'review' ? '復習期限が来た問題はありません'
+      : quiz.mode === 'weak' ? '弱点分野はまだありません（5回以上解いた分野で正答率7割未満のものが弱点になります）'
+        : STATE.offline ? 'オフライン用の問題がありません。オンラインのときに一度アプリを開いてください'
+          : '出題できる問題がありません（すべて学習済みです）';
+    showToast(msg, 'info');
     return;
   }
 
   stopTimer();
   STATE.currentQuest = quest;
-  STATE.quiz = { quest, cards, index: 0, answers: [], startedAt: Date.now(), saving: false };
+  STATE.quiz = { quest, cards, index: 0, answers: [], startedAt: Date.now(), saving: false, format: quiz.format };
   setHidden('questHeroCard', true);
   setHidden('questRunCard', true);
   setHidden('completionBanner', true);
@@ -1022,13 +1149,31 @@ function renderQuizCard() {
   document.getElementById('quizCounter').textContent = `${index + 1} / ${cards.length}`;
   document.getElementById('quizBarFill').style.width = `${(index / cards.length) * 100}%`;
   document.getElementById('quizSourceTag').textContent = card.sourceLabel;
-  document.getElementById('quizTopic').textContent = card.topic;
+  document.getElementById('quizTopic').textContent = card.field ? `${card.topic}（${card.field}）` : card.topic;
   document.getElementById('quizQuestion').textContent = card.question;
   document.getElementById('quizAnswer').textContent = card.answer;
+  document.getElementById('quizAnswerLabel').textContent = '💡 答え';
   document.getElementById('quizSourceLink').href = card.url;
+  document.getElementById('quizReportNote').value = '';
+  setHidden('quizReportForm', true);
   setHidden('quizAnswerBox', true);
   setHidden('quizJudge', true);
-  setHidden('btnQuizReveal', false);
+  setHidden('quizNext', true);
+
+  const choicesBox = document.getElementById('quizChoices');
+  if (card.choices) {
+    setHidden('btnQuizReveal', true);
+    choicesBox.innerHTML = card.choices.map((c, i) => `
+      <button class="quiz-choice" type="button" data-idx="${i}"><span class="choice-no">${i + 1}</span>${escapeHtml(c)}</button>`).join('');
+    choicesBox.querySelectorAll('.quiz-choice').forEach(btn => {
+      btn.addEventListener('click', () => chooseQuizAnswer(parseInt(btn.getAttribute('data-idx'), 10)));
+    });
+    choicesBox.hidden = false;
+  } else {
+    choicesBox.hidden = true;
+    choicesBox.innerHTML = '';
+    setHidden('btnQuizReveal', false);
+  }
   const correct = answers.filter(a => a.correct).length;
   document.getElementById('quizScore').textContent = answers.length ? `⭕ ${correct} / ❌ ${answers.length - correct}` : '';
 }
@@ -1039,15 +1184,59 @@ function revealQuizAnswer() {
   setHidden('btnQuizReveal', true);
 }
 
+// 4択: 選んだら自動で採点し、答えを見せて「次へ」を待つ
+function chooseQuizAnswer(idx) {
+  const quiz = STATE.quiz;
+  const card = quiz.cards[quiz.index];
+  if (!card.choices || !document.getElementById('quizAnswerBox').hidden) return;
+  const correct = card.choices[idx] === card.answer;
+  document.querySelectorAll('#quizChoices .quiz-choice').forEach((btn, i) => {
+    btn.disabled = true;
+    if (card.choices[i] === card.answer) btn.classList.add('correct');
+    else if (i === idx) btn.classList.add('wrong');
+  });
+  quiz.answers.push({ id: card.id, correct });
+  document.getElementById('quizAnswerLabel').textContent = correct ? '⭕ 正解！' : '❌ 不正解 — 正しい答え';
+  setHidden('quizAnswerBox', false);
+  setHidden('quizNext', false);
+  document.getElementById('btnQuizNext').focus({ preventScroll: true });
+}
+
+function goNextQuizCard() {
+  const quiz = STATE.quiz;
+  if (!quiz || quiz.saving) return;
+  quiz.index++;
+  if (quiz.index < quiz.cards.length) renderQuizCard();
+  else finishQuiz();
+}
+
 function judgeQuizCard(correct) {
   const quiz = STATE.quiz;
   if (!quiz || quiz.saving) return;
   quiz.answers.push({ id: quiz.cards[quiz.index].id, correct });
-  quiz.index++;
-  if (quiz.index < quiz.cards.length) {
-    renderQuizCard();
+  goNextQuizCard();
+}
+
+async function sendQuizReport() {
+  const quiz = STATE.quiz;
+  if (!quiz) return;
+  const card = quiz.cards[quiz.index];
+  if (STATE.offline) {
+    showToast('オフライン中は報告できません。オンラインのときにもう一度お試しください', 'warn');
+    return;
+  }
+  const data = await api('/api/quiz/reports', {
+    body: {
+      cardId: card.id,
+      reason: document.getElementById('quizReportReason').value,
+      note: document.getElementById('quizReportNote').value.trim()
+    }
+  });
+  if (data.success) {
+    showToast('報告しました。教材タブの「報告した問題」から確認できます', 'success');
+    setHidden('quizReportForm', true);
   } else {
-    finishQuiz();
+    showToast(data.error || '報告できませんでした', 'error');
   }
 }
 
@@ -1068,18 +1257,21 @@ async function finishQuiz() {
   if (quiz.saving) return;
   quiz.saving = true;
   document.getElementById('quizBarFill').style.width = '100%';
-  const minutes = Math.max(1, Math.round((Date.now() - quiz.startedAt) / 60000));
+  const payload = {
+    answers: quiz.answers,
+    title: quiz.quest.title,
+    minutes: Math.max(1, Math.round((Date.now() - quiz.startedAt) / 60000)),
+    reason: quiz.quest.reason,
+    criteria: quiz.quest.criteria,
+    decisionSource: quiz.quest.decisionSource,
+    format: quiz.format
+  };
   try {
-    const data = await api('/api/quiz/answers', {
-      body: {
-        answers: quiz.answers,
-        title: quiz.quest.title,
-        minutes,
-        reason: quiz.quest.reason,
-        criteria: quiz.quest.criteria,
-        decisionSource: quiz.quest.decisionSource
-      }
-    });
+    if (STATE.offline) {
+      queueQuizResult(payload, quiz);
+      return;
+    }
+    const data = await api('/api/quiz/answers', { body: payload });
     if (!data.success) {
       showToast(data.error || '結果を保存できませんでした', 'error');
       return;
@@ -1089,7 +1281,9 @@ async function finishQuiz() {
     renderQuizCompletion(data);
     updateReviewBadge();
   } catch (err) {
-    showToast('保存中に通信エラーが発生しました', 'error');
+    // 通信が切れていたら、あとで送る
+    enterOfflineMode();
+    queueQuizResult(payload, quiz);
   } finally {
     quiz.saving = false;
   }
@@ -1101,12 +1295,16 @@ function renderQuizCompletion(data) {
   document.getElementById('compTitle').textContent = data.summary;
   document.getElementById('compScoreTag').textContent = `理解度: ${SCORE_LABELS[ev.understandingScore] || '-'}`;
   document.getElementById('compReviewTag').textContent = data.wrongCards.length ? `復習: ${data.wrongCards.length}問を明日` : '復習: 間隔をあけて再確認';
-  document.getElementById('compSourceTag').textContent = ev.decisionSource === 'jev' ? '判定: 🧠 Jev (Score / Noul)' : '判定: 📋 ルール';
+  document.getElementById('compSourceTag').textContent = ev.decisionSource === 'jev' ? '判定: 🧠 Jev (Score / Noul)'
+    : ev.decisionSource === 'offline' ? '判定: 📴 オンライン復帰後に保存' : '判定: 📋 ルール';
   const all = data.stats && data.stats.all;
-  document.getElementById('compMessage').textContent = all
-    ? `一問一答の学習済み: ${all.studied} / ${all.total}問（定着 ${all.mastered}問）。⭕の問題も 3日後・7日後…と間隔をあけて再確認します。`
-    : '';
+  const weak = (data.weakFields || []).map(f => `${f.name}（${Math.round(f.accuracy * 100)}%）`).join('、');
+  document.getElementById('compMessage').textContent = data.message || (all
+    ? `一問一答の学習済み: ${all.studied} / ${all.total}問（定着 ${all.mastered}問）。${weak ? `弱点分野: ${weak}。` : ''}⭕の問題も 3日後・7日後…と間隔をあけて再確認します。`
+    : '');
   setHidden('compAnswerNotes', true);
+  setHidden('compKeywordBox', true);
+  setHidden('compReviewBox', true);
 
   document.getElementById('compWrongList').innerHTML = data.wrongCards.map(c => `
     <li>
@@ -1130,33 +1328,66 @@ function renderQuizReviewCard(stats) {
 
 // --- 9. 教材タブ ---
 function initLibrary() {
+  const formatSelect = document.getElementById('libFormat');
+  formatSelect.value = preferredQuizFormat();
+  formatSelect.addEventListener('change', () => storageSet(QUIZ_FORMAT_KEY, formatSelect.value));
+
   document.getElementById('btnLibStartQuiz').addEventListener('click', () => {
     const sessionSelect = document.getElementById('libSession');
+    const groupSelect = document.getElementById('libGroup');
     const exam = document.getElementById('libExam').value;
     const session = sessionSelect.value;
+    const group = groupSelect.value;
     const mode = document.getElementById('libMode').value;
+    const format = formatSelect.value;
     const count = parseInt(document.getElementById('libCount').value, 10);
     const examName = { all: '応用情報 午前 + 支援士 午前II', sc: '支援士 午前II', ap: '応用情報 午前' }[exam];
-    const sessionLabel = session === 'all' ? '過去5年分' : sessionSelect.selectedOptions[0].textContent;
+    const labels = [session === 'all' ? '過去5年分' : sessionSelect.selectedOptions[0].textContent];
+    if (mode === 'weak') labels.push('弱点分野');
+    else if (group !== 'all') labels.push(groupSelect.selectedOptions[0].textContent);
+    if (format === 'choice') labels.push('4択');
     switchTab('quest');
     startQuizRun({
       type: '一問一答',
       category: 'sc',
-      title: `一問一答: ${examName}（${sessionLabel}・${count}問）`,
-      quiz: { exam, session, mode, count },
+      title: `一問一答: ${examName}（${labels.join('・')}・${count}問）`,
+      quiz: { exam, session, group, mode, count, format },
       reason: '教材タブから選んだ一問一答です。',
-      criteria: '答えを見る前に自分の答えを思い浮かべ、⭕/❌を正直に付けること。',
+      criteria: '答えを見る前に自分の答えを思い浮かべ、正直に採点すること。',
       decisionSource: 'manual'
     });
   });
+
+  document.getElementById('btnWeakQuiz').addEventListener('click', () => {
+    switchTab('quest');
+    startQuizRun({
+      type: '一問一答',
+      category: 'sc',
+      title: '一問一答: 弱点分野を集中演習（20問）',
+      quiz: { exam: 'all', mode: 'weak', count: 20 },
+      reason: '正答率の低い分野を重点的に解いて、弱点を埋めます。',
+      criteria: '弱点分野の正答率を上げること。',
+      decisionSource: 'manual'
+    });
+  });
+
+  document.getElementById('btnCopyReports').addEventListener('click', copyReports);
 
   setupPills('readingFilterPills', val => {
     STATE.readingFilter = val;
     renderReadingList();
   });
+  setupPills('writtenFilterPills', val => {
+    STATE.writtenFilter = val;
+    renderWrittenList();
+  });
 }
 
 async function loadLibrary() {
+  if (STATE.offline) {
+    showToast('オフライン中は教材の一覧を読み込めません', 'warn');
+    return;
+  }
   try {
     const data = await api('/api/content');
     if (!data.quiz) return;
@@ -1165,6 +1396,10 @@ async function loadLibrary() {
     const sessionSelect = document.getElementById('libSession');
     if (sessionSelect.options.length === 1) {
       data.quiz.sessions.forEach(s => sessionSelect.add(new Option(s.label, s.session)));
+    }
+    const groupSelect = document.getElementById('libGroup');
+    if (groupSelect.options.length === 1) {
+      data.quiz.groups.forEach(g => groupSelect.add(new Option(`${g.name}（${g.area}）`, g.id)));
     }
 
     const stats = data.quiz.stats;
@@ -1179,15 +1414,147 @@ async function loadLibrary() {
           <div class="quiz-stat-meta">定着 ${s.mastered}問 ・ 復習待ち ${s.due}問</div>
         </div>`;
     }).join('');
-    // CSP でインライン style 属性は使えないので、幅は DOM から設定する
-    document.querySelectorAll('#quizStatsGrid [data-pct]').forEach(bar => {
-      bar.style.width = `${bar.getAttribute('data-pct')}%`;
-    });
 
+    renderFieldStats(data.quiz.fields);
+    renderReports(data.quiz.reports);
+    applyBarWidths();
+    renderWrittenList();
     renderReadingList();
+    loadAiFeed();
   } catch (e) {
     showToast('教材を読み込めませんでした', 'error');
   }
+}
+
+// CSP でインライン style 属性は使えないので、棒グラフの幅は DOM から設定する
+function applyBarWidths() {
+  document.querySelectorAll('#view-library [data-pct]').forEach(bar => {
+    bar.style.width = `${bar.getAttribute('data-pct')}%`;
+  });
+}
+
+function renderFieldStats(fields) {
+  const list = document.getElementById('fieldStatsList');
+  const judged = fields.filter(f => f.accuracy !== null);
+  setHidden('btnWeakQuiz', !fields.some(f => f.weak));
+  if (judged.length === 0) {
+    list.innerHTML = '<p class="text-muted">まだ判定できるほど解いていません。一問一答を解くと、分野ごとの正答率がここに表示されます。</p>';
+    return;
+  }
+  // 判定済みの分野を正答率の低い順に、未判定の分野は後ろにまとめる
+  const sorted = [...judged].sort((a, b) => a.accuracy - b.accuracy);
+  const pending = fields.filter(f => f.accuracy === null && f.attempts > 0);
+  list.innerHTML = sorted.map(f => {
+    const pct = Math.round(f.accuracy * 100);
+    return `
+      <div class="field-row${f.weak ? ' weak' : ''}">
+        <div class="field-name">${f.weak ? '⚠ ' : ''}${escapeHtml(f.name)} <small>${escapeHtml(f.area)}</small></div>
+        <div class="field-bar"><div data-pct="${pct}"></div></div>
+        <div class="field-pct">${pct}%<small> ${f.correct}/${f.attempts}回</small></div>
+      </div>`;
+  }).join('') + (pending.length
+    ? `<p class="field-hint">判定前（5回未満）: ${pending.map(f => escapeHtml(f.name)).join('、')}</p>`
+    : '');
+}
+
+function renderReports(reports) {
+  STATE.reports = reports;
+  setHidden('reportCard', reports.length === 0);
+  document.getElementById('reportCount').textContent = `${reports.length}件`;
+  const list = document.getElementById('reportList');
+  list.innerHTML = reports.map(r => `
+    <div class="report-row">
+      <div class="reading-main">
+        <div class="reading-tags">
+          <span class="tag tag-type">${escapeHtml(r.card.sourceLabel)}</span>
+          <span class="mistake-badge">${escapeHtml(r.reason)}</span>
+        </div>
+        <p class="report-q">${escapeHtml(r.card.question)}</p>
+        <p class="report-a">→ ${escapeHtml(r.card.answer)}</p>
+        ${r.note ? `<p class="report-note">メモ: ${escapeHtml(r.note)}</p>` : ''}
+      </div>
+      <button class="btn btn-ghost btn-sm" data-report="${escapeHtml(r.id)}" type="button">削除</button>
+    </div>`).join('');
+  list.querySelectorAll('button[data-report]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      await api('/api/quiz/reports/delete', { body: { reportId: btn.getAttribute('data-report') } });
+      loadLibrary();
+    });
+  });
+}
+
+// 報告を、Issue や修正依頼にそのまま貼れる Markdown にしてコピーする
+async function copyReports() {
+  const reports = STATE.reports || [];
+  const text = [
+    '## 一問一答の問題報告',
+    '',
+    ...reports.map(r => [
+      `### ${r.card.id}（${r.card.sourceLabel}）`,
+      `- 理由: ${r.reason}${r.note ? ` / ${r.note}` : ''}`,
+      `- 問題: ${r.card.question}`,
+      `- 現在の答え: ${r.card.answer}`,
+      `- 元の過去問: ${r.card.url}`,
+      ''
+    ].join('\n'))
+  ].join('\n');
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast(`${reports.length}件の報告をコピーしました`, 'success');
+  } catch (e) {
+    showToast('コピーできませんでした（ブラウザの設定を確認してください）', 'error');
+  }
+}
+
+function renderWrittenList() {
+  if (!STATE.library) return;
+  const written = STATE.library.written;
+  const filter = STATE.writtenFilter || 'todo';
+  document.getElementById('writtenCount').textContent = `演習済み ${written.filter(w => w.attempted).length} / ${written.length}問`;
+  const filtered = written.filter(w => filter === 'all' || (filter === 'done' ? w.attempted : !w.attempted));
+  const list = document.getElementById('writtenList');
+  if (filtered.length === 0) {
+    list.innerHTML = `<p class="text-muted">${filter === 'done' ? 'まだ演習した問題はありません' : 'すべて演習しました 🎉'}</p>`;
+    return;
+  }
+  list.innerHTML = filtered.map(w => `
+    <div class="reading-row">
+      <div class="reading-main">
+        <div class="reading-tags">
+          <span class="tag tag-cat">${escapeHtml(w.title.split('「')[0].trim())}</span>
+          <span class="tag tag-time">⏱ ${w.minutes}分</span>
+          ${w.done ? '<span class="tag tag-source jev">✔ できた</span>' : (w.attempted ? '<span class="tag tag-source warn">要復習</span>' : '')}
+        </div>
+        <span class="reading-title">${escapeHtml(w.theme)}</span>
+        <p class="reading-focus">
+          <a class="run-link" href="${escapeHtml(w.questionPdf)}" target="_blank" rel="noopener noreferrer">問題冊子（IPA）↗</a>
+          ・ ${escapeHtml(w.note)}
+        </p>
+      </div>
+      <button class="btn btn-secondary btn-sm" data-wid="${escapeHtml(w.id)}" type="button">${w.attempted ? 'もう一度' : '演習する'}</button>
+    </div>`).join('');
+
+  list.querySelectorAll('button[data-wid]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const w = written.find(x => x.id === btn.getAttribute('data-wid'));
+      if (!w) return;
+      switchTab('quest');
+      startQuestRun({
+        type: '過去問を解く',
+        category: 'sc',
+        title: `過去問記述演習: 支援士 ${w.title}`,
+        sourceRef: 'IPA 過去問題',
+        questionText: `IPA の問題冊子（PDF）を開き、${w.title.replace(/「.*」$/, '')}を解いてください。\n目安: ${w.minutes}分（本試験は${w.note}）\n\n答案は設問ごとに「設問1(1): …」の形で書きます。解き終わったら解答例と照らし合わせて自己採点してください。`,
+        url: w.questionPdf,
+        answerUrl: w.answerPdf,
+        recommendedMinutes: w.minutes,
+        reason: '支援士の午後/科目Bの本番の問題で、記述力と設問の読解力を鍛えます。',
+        criteria: '時間内に全設問の答案を書き、解答例のキーワードと照らし合わせて自己採点すること。',
+        itemId: w.itemId,
+        decisionSource: 'manual'
+      });
+    });
+  });
 }
 
 function renderReadingList() {
@@ -1239,6 +1606,232 @@ function renderReadingList() {
       });
     });
   });
+}
+
+// AI の新着（公式ブログ・arXiv）。「素材に追加」でキャッチアップ素材として登録する
+async function loadAiFeed() {
+  const list = document.getElementById('feedList');
+  list.innerHTML = '<p class="text-muted">新着を読み込み中...</p>';
+  try {
+    const [feed, itemData] = await Promise.all([api('/api/ai-feed'), api('/api/registered-items')]);
+    const registeredUrls = new Set((itemData.items || []).map(i => i.url).filter(Boolean));
+    document.getElementById('feedUpdated').textContent = feed.fetchedAt
+      ? `${new Date(feed.fetchedAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 時点`
+      : '';
+    const items = (feed.items || []).slice(0, 20);
+    if (items.length === 0) {
+      list.innerHTML = '<p class="text-muted">新着を取得できませんでした。時間をおいて開き直してください。</p>';
+      return;
+    }
+    list.innerHTML = items.map((item, i) => `
+      <div class="reading-row">
+        <div class="reading-main">
+          <div class="reading-tags">
+            <span class="tag tag-cat">${escapeHtml(item.source)}</span>
+            ${item.publishedAt ? `<span class="tag tag-type">${escapeHtml(item.publishedAt.slice(0, 10))}</span>` : ''}
+          </div>
+          <a class="reading-title" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.title)} ↗</a>
+          ${item.summary ? `<p class="reading-focus">${escapeHtml(item.summary)}</p>` : ''}
+        </div>
+        <button class="btn btn-secondary btn-sm" data-feed="${i}" type="button" ${registeredUrls.has(item.url) ? 'disabled' : ''}>
+          ${registeredUrls.has(item.url) ? '追加済み' : '素材に追加'}
+        </button>
+      </div>`).join('') + (feed.errors && feed.errors.length
+      ? `<p class="field-hint">取得できなかったサイト: ${feed.errors.map(escapeHtml).join('、')}</p>` : '');
+
+    list.querySelectorAll('button[data-feed]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const item = items[parseInt(btn.getAttribute('data-feed'), 10)];
+        btn.disabled = true;
+        const data = await api('/api/registered-items', {
+          body: {
+            type: 'catchup',
+            category: item.sourceId === 'microsoft-security' || item.sourceId === 'arxiv-llm-security' ? 'security' : 'ai',
+            title: item.title,
+            source: item.source,
+            url: item.url,
+            publishedDate: item.publishedAt ? item.publishedAt.slice(0, 10) : '',
+            notes: item.summary,
+            nextAction: '既存知識と比較する'
+          }
+        });
+        if (data.success) {
+          btn.textContent = '追加済み';
+          showToast('素材に追加しました。今日のクエストの候補になります', 'success');
+        } else {
+          btn.disabled = false;
+          showToast(data.error || '追加できませんでした', 'error');
+        }
+      });
+    });
+  } catch (e) {
+    list.innerHTML = '<p class="text-muted">新着を読み込めませんでした</p>';
+  }
+}
+
+// --- 10. オフライン（PWA） ---
+function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.register('/sw.js').catch(() => { /* 登録できなくても通常どおり使える */ });
+}
+
+function initOffline() {
+  document.getElementById('btnOfflineQuiz').addEventListener('click', () => {
+    startQuizRun({
+      type: '一問一答',
+      category: 'sc',
+      title: '一問一答（オフライン）',
+      quiz: { exam: 'all', mode: 'mix', count: 10 },
+      reason: 'オフラインでも、保存しておいた問題で一問一答を続けられます。',
+      criteria: '答えを見る前に自分の答えを思い浮かべ、正直に採点すること。',
+      decisionSource: 'offline'
+    });
+  });
+  window.addEventListener('offline', () => enterOfflineMode());
+  window.addEventListener('online', async () => {
+    if (!STATE.offline) return;
+    showToast('オンラインに戻りました', 'success');
+    // ログイン前にオフラインで起動していた場合は、画面を読み込み直して通常どおり始める
+    if (document.getElementById('appShell').dataset.offlineBoot === '1') {
+      window.location.reload();
+      return;
+    }
+    STATE.offline = false;
+    updateOfflineUi();
+    await flushPendingQuizResults();
+    loadRecommendedQuest();
+  });
+}
+
+function loadOfflineDeck() {
+  try {
+    const deck = JSON.parse(storageGet(OFFLINE_DECK_KEY) || '[]');
+    return Array.isArray(deck) ? deck : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function loadPendingResults() {
+  try {
+    const list = JSON.parse(storageGet(PENDING_RESULTS_KEY) || '[]');
+    return Array.isArray(list) ? list : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+// オンラインのうちに、次に解く問題をまとめて端末に保存しておく（問題は公開教材のみ、個人情報は含まない）
+async function refreshOfflineDeck() {
+  try {
+    const data = await api(`/api/quiz/deck?mode=mix&count=30`);
+    const more = await api(`/api/quiz/deck?mode=new&count=30`);
+    const seen = new Set();
+    const cards = [...(data.cards || []), ...(more.cards || [])]
+      .filter(c => !seen.has(c.id) && seen.add(c.id))
+      .slice(0, OFFLINE_DECK_SIZE)
+      .map(({ id, exam, sessionLabel, no, topic, question, answer, field, group, sourceLabel, url }) =>
+        ({ id, exam, sessionLabel, no, topic, question, answer, field, group, sourceLabel, url }));
+    if (cards.length) storageSet(OFFLINE_DECK_KEY, JSON.stringify(cards));
+  } catch (e) { /* 取れなくても次回に再挑戦 */ }
+}
+
+// オフライン用の出題: まだ解いていない（送信待ちに入っていない）問題から選ぶ
+function offlineDeckCards(quiz) {
+  const answered = new Set(loadPendingResults().flatMap(r => r.answers.map(a => a.id)));
+  const deck = loadOfflineDeck();
+  const cards = deck
+    .filter(c => !answered.has(c.id))
+    .filter(c => !quiz.exam || quiz.exam === 'all' || c.exam === quiz.exam)
+    .slice(0, quiz.count || 10);
+  if (quiz.format !== 'choice') return cards;
+  // 4択はオフライン用の問題の答えから選択肢を作る
+  return cards.map(card => {
+    const others = deck.filter(c => c.id !== card.id && c.answer !== card.answer);
+    const sameGroup = others.filter(c => c.group === card.group);
+    const pool = [...shuffleList(sameGroup), ...shuffleList(others)];
+    const distractors = [...new Set(pool.map(c => c.answer))].slice(0, 3);
+    return { ...card, choices: shuffleList([card.answer, ...distractors]) };
+  });
+}
+
+function shuffleList(list) {
+  const arr = list.slice();
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function queueQuizResult(payload, quiz) {
+  const pending = loadPendingResults();
+  pending.push(payload);
+  storageSet(PENDING_RESULTS_KEY, JSON.stringify(pending));
+  STATE.quiz = null;
+  setHidden('quizRunCard', true);
+  const correct = payload.answers.filter(a => a.correct).length;
+  const wrongIds = new Set(payload.answers.filter(a => !a.correct).map(a => a.id));
+  renderQuizCompletion({
+    summary: `${payload.answers.length}問中${correct}問正解`,
+    evaluation: { decisionSource: 'offline' },
+    wrongCards: quiz.cards.filter(c => wrongIds.has(c.id)),
+    message: 'オフラインで解いた結果を端末に保存しました。次にオンラインになったときに自動で送信され、復習の予定に反映されます。'
+  });
+  updateOfflineUi();
+}
+
+async function flushPendingQuizResults() {
+  const pending = loadPendingResults();
+  if (pending.length === 0) return;
+  const rest = [];
+  for (const payload of pending) {
+    try {
+      const data = await api('/api/quiz/answers', { body: payload });
+      // 400（該当する問題がない）は送り直しても成功しないので捨てる
+      if (!data.success && data.error && !/該当する問題/.test(data.error)) rest.push(payload);
+    } catch (e) {
+      rest.push(payload);
+    }
+  }
+  storageSet(PENDING_RESULTS_KEY, JSON.stringify(rest));
+  const sent = pending.length - rest.length;
+  if (sent > 0) {
+    showToast(`オフラインで解いた一問一答の結果（${sent}回分）を保存しました`, 'success');
+    updateReviewBadge();
+  }
+}
+
+function enterOfflineMode() {
+  if (STATE.offline) return;
+  STATE.offline = true;
+  // ログイン前（通信できずに起動した場合）でも、一問一答だけは使えるようにする
+  if (document.getElementById('appShell').hidden) {
+    setHidden('authScreen', true);
+    setHidden('appShell', false);
+    document.getElementById('appShell').dataset.offlineBoot = '1';
+    switchTab('quest');
+    setHidden('questHeroCard', true);
+  }
+  updateOfflineUi();
+}
+
+function updateOfflineUi() {
+  const offline = Boolean(STATE.offline);
+  setHidden('offlineChip', !offline);
+  setHidden('offlineBanner', !offline);
+  // 条件の選択やクエストの提案はサーバーが必要なので、オフライン中は隠す
+  document.querySelector('.filter-bar').hidden = offline;
+  if (offline && document.getElementById('appShell').dataset.offlineBoot === '1') {
+    document.getElementById('jevChipText').textContent = 'Jev 接続なし';
+  }
+  if (offline) {
+    const pending = loadPendingResults().length;
+    const left = offlineDeckCards({ exam: 'all', count: OFFLINE_DECK_SIZE }).length;
+    document.getElementById('offlineBannerText').textContent =
+      `保存しておいた一問一答（残り${left}問）を解けます。` +
+      (pending ? `送信待ちの結果が${pending}回分あり、オンラインに戻ると自動で保存されます。` : '結果は次にオンラインになったときに自動で保存されます。');
+  }
 }
 
 async function checkJevStatus() {

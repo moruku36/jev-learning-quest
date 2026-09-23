@@ -1,0 +1,17 @@
+{
+  "name": "Jev 学習クエスト",
+  "short_name": "Jev学習",
+  "description": "判断AI Jev が「今日やる1つ」を選ぶ、支援士試験対策と AI・セキュリティのキャッチアップ",
+  "lang": "ja",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}
