@@ -17,7 +17,11 @@ const STATE = {
     isRunning: false
   },
   isCorrect: true,
-  mistakeReason: '読み落とし'
+  mistakeReason: '読み落とし',
+  // 一問一答の実行状態
+  quiz: null,
+  library: null,
+  readingFilter: 'todo'
 };
 
 const CATEGORY_NAMES = {
@@ -58,6 +62,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   initRegisterForms();
   initSettings();
   initAuthButtons();
+  initQuiz();
+  initLibrary();
 
   const ready = await initAuth();
   if (ready) await startApp();
@@ -269,6 +275,8 @@ function switchTab(tabName) {
 
   if (tabName === 'review') {
     loadReviewList();
+  } else if (tabName === 'library') {
+    loadLibrary();
   } else if (tabName === 'register') {
     loadItemList();
   } else if (tabName === 'settings') {
@@ -423,6 +431,10 @@ function closeCandidatesModal() {
 }
 
 function startQuestRun(quest) {
+  if (quest.type === '一問一答') {
+    startQuizRun(quest);
+    return;
+  }
   STATE.currentQuest = quest;
   setHidden('questHeroCard', true);
   setHidden('completionBanner', true);
@@ -434,7 +446,15 @@ function startQuestRun(quest) {
   const minutes = quest.recommendedMinutes || STATE.conditions.minutes || 20;
 
   const promptBox = document.getElementById('runPrompt');
-  if (quest.type === '過去問を解く' || quest.type === '誤答を直す') {
+  const link = document.getElementById('runLink');
+  link.hidden = !quest.url;
+  if (quest.url) link.href = quest.url;
+
+  if (quest.type === 'レポートを読む' || (quest.type === '誤答を直す' && quest.focus)) {
+    let text = `【読むもの】\n${quest.title.replace(/^【再挑戦】/, '')}\n\n【読むときの観点】\n${quest.focus || '-'}\n\n【アウトプット】\n${quest.task || quest.criteria || '要点を3行でまとめる'}`;
+    if (quest.previousMistake) text = `【前回つまずいた点】\n${quest.previousMistake}\n\n${text}`;
+    promptBox.textContent = text;
+  } else if (quest.type === '過去問を解く' || quest.type === '誤答を直す') {
     let text = quest.questionText || '過去問の設問に沿って、解説を見ずに答案を作成してください。';
     if (quest.previousMistake) {
       text = `【前回つまずいた点】\n${quest.previousMistake}\n\n【設問】\n${text}`;
@@ -616,7 +636,8 @@ function renderCompletion(data) {
 
 // --- 5. 復習タブ ---
 function isPendingReview(h) {
-  return !h.isCorrect && !h.resolved && h.noulNeedsReview !== false;
+  // 一問一答はカードごとの間隔反復で復習するので、学習記録単位の再挑戦には出さない
+  return !h.isCorrect && !h.resolved && h.noulNeedsReview !== false && h.kind !== 'quiz';
 }
 
 async function loadReviewList() {
@@ -629,6 +650,7 @@ async function loadReviewList() {
     const history = histData.history || [];
     const items = itemData.items || [];
     const pending = history.filter(isPendingReview);
+    renderQuizReviewCard(histData.quizStats);
 
     if (pending.length === 0) {
       container.innerHTML = '<div class="empty-state">🎉 再挑戦待ちの問題はありません</div>';
@@ -725,7 +747,9 @@ function renderHistoryList(history) {
 async function updateReviewBadge() {
   try {
     const data = await api('/api/history');
-    const pendingCount = (data.history || []).filter(isPendingReview).length;
+    // 一問一答は「前回間違えて復習期限が来た問題」だけをバッジに数える
+    const quizWrongDue = data.quizStats ? data.quizStats.wrongDue : 0;
+    const pendingCount = (data.history || []).filter(isPendingReview).length + quizWrongDue;
     const badge = document.getElementById('reviewCountBadge');
     badge.textContent = pendingCount;
     badge.hidden = pendingCount === 0;
@@ -930,6 +954,291 @@ async function runJevTest(key, { saving = false } = {}) {
     resultBox.textContent = `通信エラー: ${err.message}`;
     return null;
   }
+}
+
+// --- 8. 一問一答 ---
+function initQuiz() {
+  document.getElementById('btnQuizReveal').addEventListener('click', revealQuizAnswer);
+  document.getElementById('btnQuizRight').addEventListener('click', () => judgeQuizCard(true));
+  document.getElementById('btnQuizWrong').addEventListener('click', () => judgeQuizCard(false));
+  document.getElementById('btnQuizQuit').addEventListener('click', quitQuiz);
+  document.getElementById('btnQuizReview').addEventListener('click', () => {
+    switchTab('quest');
+    startQuizRun({
+      type: '一問一答',
+      category: 'sc',
+      title: '【復習】一問一答',
+      quiz: { exam: 'all', mode: 'review', count: 20 },
+      reason: '間違えた問題と、忘れかけた問題を出し直して記憶を定着させます。',
+      criteria: '答えを見る前に自分の答えを言えること。',
+      decisionSource: 'manual'
+    });
+  });
+
+  // キーボード操作: Space/Enter で答えを表示、Y/→ で覚えてた、N/← でまだ
+  document.addEventListener('keydown', e => {
+    if (!STATE.quiz || document.getElementById('quizRunCard').hidden) return;
+    const typing = e.target instanceof Element && e.target.closest('input, textarea, select');
+    if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+    const revealed = !document.getElementById('quizAnswerBox').hidden;
+    if (!revealed && (e.key === ' ' || e.key === 'Enter')) {
+      e.preventDefault();
+      revealQuizAnswer();
+    } else if (revealed && (e.key === 'y' || e.key === 'Y' || e.key === 'ArrowRight')) {
+      e.preventDefault();
+      judgeQuizCard(true);
+    } else if (revealed && (e.key === 'n' || e.key === 'N' || e.key === 'ArrowLeft')) {
+      e.preventDefault();
+      judgeQuizCard(false);
+    }
+  });
+}
+
+async function startQuizRun(quest) {
+  const params = new URLSearchParams(Object.entries(quest.quiz || {}).map(([k, v]) => [k, String(v)]));
+  const data = await api(`/api/quiz/deck?${params}`);
+  const cards = data.cards || [];
+  if (cards.length === 0) {
+    const reviewOnly = quest.quiz && quest.quiz.mode === 'review';
+    showToast(reviewOnly ? '復習期限が来た問題はありません' : '出題できる問題がありません（すべて学習済みです）', 'info');
+    return;
+  }
+
+  stopTimer();
+  STATE.currentQuest = quest;
+  STATE.quiz = { quest, cards, index: 0, answers: [], startedAt: Date.now(), saving: false };
+  setHidden('questHeroCard', true);
+  setHidden('questRunCard', true);
+  setHidden('completionBanner', true);
+  setHidden('quizRunCard', false);
+  document.getElementById('quizTitle').textContent = quest.title;
+  renderQuizCard();
+  document.getElementById('quizRunCard').scrollIntoView({ behavior: 'smooth' });
+}
+
+function renderQuizCard() {
+  const { cards, index, answers } = STATE.quiz;
+  const card = cards[index];
+  document.getElementById('quizCounter').textContent = `${index + 1} / ${cards.length}`;
+  document.getElementById('quizBarFill').style.width = `${(index / cards.length) * 100}%`;
+  document.getElementById('quizSourceTag').textContent = card.sourceLabel;
+  document.getElementById('quizTopic').textContent = card.topic;
+  document.getElementById('quizQuestion').textContent = card.question;
+  document.getElementById('quizAnswer').textContent = card.answer;
+  document.getElementById('quizSourceLink').href = card.url;
+  setHidden('quizAnswerBox', true);
+  setHidden('quizJudge', true);
+  setHidden('btnQuizReveal', false);
+  const correct = answers.filter(a => a.correct).length;
+  document.getElementById('quizScore').textContent = answers.length ? `⭕ ${correct} / ❌ ${answers.length - correct}` : '';
+}
+
+function revealQuizAnswer() {
+  setHidden('quizAnswerBox', false);
+  setHidden('quizJudge', false);
+  setHidden('btnQuizReveal', true);
+}
+
+function judgeQuizCard(correct) {
+  const quiz = STATE.quiz;
+  if (!quiz || quiz.saving) return;
+  quiz.answers.push({ id: quiz.cards[quiz.index].id, correct });
+  quiz.index++;
+  if (quiz.index < quiz.cards.length) {
+    renderQuizCard();
+  } else {
+    finishQuiz();
+  }
+}
+
+async function quitQuiz() {
+  const quiz = STATE.quiz;
+  if (quiz && quiz.answers.length > 0
+    && confirm(`ここまでの${quiz.answers.length}問の結果を保存して終わりますか？\n（キャンセルすると保存せずに中断します）`)) {
+    await finishQuiz();
+    return;
+  }
+  STATE.quiz = null;
+  setHidden('quizRunCard', true);
+  setHidden('questHeroCard', false);
+}
+
+async function finishQuiz() {
+  const quiz = STATE.quiz;
+  if (quiz.saving) return;
+  quiz.saving = true;
+  document.getElementById('quizBarFill').style.width = '100%';
+  const minutes = Math.max(1, Math.round((Date.now() - quiz.startedAt) / 60000));
+  try {
+    const data = await api('/api/quiz/answers', {
+      body: {
+        answers: quiz.answers,
+        title: quiz.quest.title,
+        minutes,
+        reason: quiz.quest.reason,
+        criteria: quiz.quest.criteria,
+        decisionSource: quiz.quest.decisionSource
+      }
+    });
+    if (!data.success) {
+      showToast(data.error || '結果を保存できませんでした', 'error');
+      return;
+    }
+    STATE.quiz = null;
+    setHidden('quizRunCard', true);
+    renderQuizCompletion(data);
+    updateReviewBadge();
+  } catch (err) {
+    showToast('保存中に通信エラーが発生しました', 'error');
+  } finally {
+    quiz.saving = false;
+  }
+}
+
+function renderQuizCompletion(data) {
+  setHidden('completionBanner', false);
+  const ev = data.evaluation || {};
+  document.getElementById('compTitle').textContent = data.summary;
+  document.getElementById('compScoreTag').textContent = `理解度: ${SCORE_LABELS[ev.understandingScore] || '-'}`;
+  document.getElementById('compReviewTag').textContent = data.wrongCards.length ? `復習: ${data.wrongCards.length}問を明日` : '復習: 間隔をあけて再確認';
+  document.getElementById('compSourceTag').textContent = ev.decisionSource === 'jev' ? '判定: 🧠 Jev (Score / Noul)' : '判定: 📋 ルール';
+  const all = data.stats && data.stats.all;
+  document.getElementById('compMessage').textContent = all
+    ? `一問一答の学習済み: ${all.studied} / ${all.total}問（定着 ${all.mastered}問）。⭕の問題も 3日後・7日後…と間隔をあけて再確認します。`
+    : '';
+  setHidden('compAnswerNotes', true);
+
+  document.getElementById('compWrongList').innerHTML = data.wrongCards.map(c => `
+    <li>
+      <span class="wrong-q">${escapeHtml(c.question)}</span>
+      <span class="wrong-a">→ ${escapeHtml(c.answer)}</span>
+      <a href="${escapeHtml(c.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(c.sourceLabel)} ↗</a>
+    </li>`).join('');
+  setHidden('compWrongBox', data.wrongCards.length === 0);
+  document.getElementById('completionBanner').scrollIntoView({ behavior: 'smooth' });
+}
+
+function renderQuizReviewCard(stats) {
+  const due = stats ? stats.due : 0;
+  setHidden('quizReviewCard', due === 0);
+  if (due > 0) {
+    document.getElementById('quizReviewText').textContent = stats.wrongDue
+      ? `復習期限が来た問題が ${due}問あります（うち前回間違えた問題 ${stats.wrongDue}問）。`
+      : `復習期限が来た問題が ${due}問あります。`;
+  }
+}
+
+// --- 9. 教材タブ ---
+function initLibrary() {
+  document.getElementById('btnLibStartQuiz').addEventListener('click', () => {
+    const sessionSelect = document.getElementById('libSession');
+    const exam = document.getElementById('libExam').value;
+    const session = sessionSelect.value;
+    const mode = document.getElementById('libMode').value;
+    const count = parseInt(document.getElementById('libCount').value, 10);
+    const examName = { all: '応用情報 午前 + 支援士 午前II', sc: '支援士 午前II', ap: '応用情報 午前' }[exam];
+    const sessionLabel = session === 'all' ? '過去5年分' : sessionSelect.selectedOptions[0].textContent;
+    switchTab('quest');
+    startQuizRun({
+      type: '一問一答',
+      category: 'sc',
+      title: `一問一答: ${examName}（${sessionLabel}・${count}問）`,
+      quiz: { exam, session, mode, count },
+      reason: '教材タブから選んだ一問一答です。',
+      criteria: '答えを見る前に自分の答えを思い浮かべ、⭕/❌を正直に付けること。',
+      decisionSource: 'manual'
+    });
+  });
+
+  setupPills('readingFilterPills', val => {
+    STATE.readingFilter = val;
+    renderReadingList();
+  });
+}
+
+async function loadLibrary() {
+  try {
+    const data = await api('/api/content');
+    if (!data.quiz) return;
+    STATE.library = data;
+
+    const sessionSelect = document.getElementById('libSession');
+    if (sessionSelect.options.length === 1) {
+      data.quiz.sessions.forEach(s => sessionSelect.add(new Option(s.label, s.session)));
+    }
+
+    const stats = data.quiz.stats;
+    document.getElementById('quizStatsGrid').innerHTML = Object.entries(data.quiz.exams).map(([key, exam]) => {
+      const s = stats[key];
+      const pct = s.total ? Math.round((s.studied / s.total) * 100) : 0;
+      return `
+        <div class="quiz-stat-box">
+          <div class="quiz-stat-name">${escapeHtml(exam.name)}</div>
+          <div class="quiz-stat-num">${s.studied}<small> / ${s.total}問</small></div>
+          <div class="quiz-stat-bar"><div data-pct="${pct}"></div></div>
+          <div class="quiz-stat-meta">定着 ${s.mastered}問 ・ 復習待ち ${s.due}問</div>
+        </div>`;
+    }).join('');
+    // CSP でインライン style 属性は使えないので、幅は DOM から設定する
+    document.querySelectorAll('#quizStatsGrid [data-pct]').forEach(bar => {
+      bar.style.width = `${bar.getAttribute('data-pct')}%`;
+    });
+
+    renderReadingList();
+  } catch (e) {
+    showToast('教材を読み込めませんでした', 'error');
+  }
+}
+
+function renderReadingList() {
+  if (!STATE.library) return;
+  const readings = STATE.library.readings;
+  const doneCount = readings.filter(r => r.done).length;
+  document.getElementById('readingCount').textContent = `読了 ${doneCount} / ${readings.length}件`;
+
+  const filter = STATE.readingFilter;
+  const filtered = readings.filter(r => filter === 'all' || (filter === 'done' ? r.done : !r.done));
+  const list = document.getElementById('readingList');
+  if (filtered.length === 0) {
+    list.innerHTML = `<p class="text-muted">${filter === 'done' ? 'まだ読了したものはありません' : 'すべて読了しました 🎉'}</p>`;
+    return;
+  }
+  list.innerHTML = filtered.map(r => `
+    <div class="reading-row">
+      <div class="reading-main">
+        <div class="reading-tags">
+          <span class="tag tag-cat">${escapeHtml(r.org)}</span>
+          <span class="tag tag-type">${escapeHtml(r.kind)}・${r.year}</span>
+          <span class="tag tag-time">⏱ ${r.minutes}分・${escapeHtml(r.level)}</span>
+          ${r.done ? '<span class="tag tag-source jev">✔ 読了</span>' : ''}
+        </div>
+        <a class="reading-title" href="${escapeHtml(r.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(r.title)} ↗</a>
+        <p class="reading-focus">${escapeHtml(r.focus)}</p>
+      </div>
+      <button class="btn btn-secondary btn-sm" data-rid="${escapeHtml(r.id)}" type="button">${r.done ? 'もう一度' : '読む'}</button>
+    </div>`).join('');
+
+  list.querySelectorAll('button[data-rid]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const r = readings.find(x => x.id === btn.getAttribute('data-rid'));
+      if (!r) return;
+      switchTab('quest');
+      startQuestRun({
+        type: 'レポートを読む',
+        category: 'ai',
+        title: `${r.org}: ${r.title}`,
+        sourceRef: `${r.org}（${r.kind}・${r.year}年）`,
+        url: r.url,
+        focus: r.focus,
+        task: r.task,
+        recommendedMinutes: r.minutes,
+        reason: 'AI 大手が公開している一次情報を読み、要点を自分の言葉で説明できるようにします。',
+        criteria: r.task,
+        itemId: r.itemId,
+        decisionSource: 'manual'
+      });
+    });
+  });
 }
 
 async function checkJevStatus() {

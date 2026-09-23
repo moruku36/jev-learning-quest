@@ -52,6 +52,7 @@
 
     <nav class="header-nav" aria-label="メインメニュー">
       <button class="nav-tab active" data-tab="quest">🎯 今日のクエスト</button>
+      <button class="nav-tab" data-tab="library">📚 教材</button>
       <button class="nav-tab" data-tab="review">
         🔁 復習
         <span class="nav-badge" id="reviewCountBadge" hidden>0</span>
@@ -163,6 +164,7 @@
           <div class="run-instruction-box">
             <span class="box-label">📋 設問 / 作業内容</span>
             <div class="box-content" id="runPrompt">-</div>
+            <a class="run-link" id="runLink" href="#" target="_blank" rel="noopener noreferrer" hidden>原文を開く ↗</a>
           </div>
 
           <div class="run-input-group">
@@ -198,6 +200,43 @@
           </div>
         </div>
 
+        <!-- 一問一答 -->
+        <div class="quest-run-card" id="quizRunCard" hidden>
+          <div class="run-header">
+            <div>
+              <span class="tag tag-cat">支援士</span>
+              <span class="tag tag-type">一問一答</span>
+              <h2 class="run-title" id="quizTitle">-</h2>
+            </div>
+            <div class="quiz-counter" id="quizCounter">1 / 10</div>
+          </div>
+          <div class="timer-bar"><div class="timer-bar-fill" id="quizBarFill"></div></div>
+
+          <div class="quiz-card">
+            <div class="quiz-meta">
+              <span class="tag tag-type" id="quizSourceTag">-</span>
+              <span class="quiz-topic" id="quizTopic"></span>
+            </div>
+            <p class="quiz-question" id="quizQuestion">-</p>
+            <button class="btn btn-secondary btn-lg quiz-reveal" id="btnQuizReveal" type="button">答えを見る <kbd>Space</kbd></button>
+            <div class="quiz-answer" id="quizAnswerBox" hidden>
+              <span class="box-label">💡 答え</span>
+              <p class="quiz-answer-text" id="quizAnswer"></p>
+              <a class="run-link" id="quizSourceLink" href="#" target="_blank" rel="noopener noreferrer">元の過去問と解説を見る ↗</a>
+            </div>
+          </div>
+
+          <div class="quiz-judge" id="quizJudge" hidden>
+            <button class="btn btn-outline btn-lg" id="btnQuizWrong" type="button">❌ まだ <kbd>N</kbd></button>
+            <button class="btn btn-primary btn-lg" id="btnQuizRight" type="button">⭕ 覚えてた <kbd>Y</kbd></button>
+          </div>
+
+          <div class="run-card-footer">
+            <button class="btn btn-outline" id="btnQuizQuit" type="button">中断する</button>
+            <span class="quiz-score" id="quizScore"></span>
+          </div>
+        </div>
+
         <!-- 完了 -->
         <div class="completion-banner" id="completionBanner" hidden>
           <div class="completion-badge">🎉 クエスト完了</div>
@@ -212,7 +251,77 @@
             <span class="box-label">💡 登録しておいた解答ポイント</span>
             <div class="box-content" id="compAnswerNotesText"></div>
           </div>
+          <div class="answer-notes" id="compWrongBox" hidden>
+            <span class="box-label">🔁 間違えた問題（明日もう一度出題されます）</span>
+            <ul class="wrong-list" id="compWrongList"></ul>
+          </div>
           <button class="btn btn-primary" id="btnCompNext">次のクエストへ</button>
+        </div>
+      </section>
+
+      <!-- ================= 1-b. 教材 ================= -->
+      <section id="view-library" class="view-panel">
+        <div class="panel-header">
+          <h2>教材</h2>
+          <p class="panel-sub">アプリに入っている教材です。ここから直接始めることも、「今日のクエスト」で Jev に選んでもらうこともできます。</p>
+        </div>
+
+        <div class="card">
+          <h3 class="card-heading">📝 一問一答（過去問5年分）</h3>
+          <p class="text-desc">
+            応用情報 午前（＝支援士の午前I）と支援士 午前IIの、令和3年春期〜令和7年秋期の出題テーマから作ったオリジナルの一問一答です。
+            問題本文と解説は、各問題のリンク先（<a href="https://www.ap-siken.com/apkakomon.php" target="_blank" rel="noopener noreferrer">応用情報技術者試験ドットコム</a> /
+            <a href="https://www.sc-siken.com/sckakomon.php" target="_blank" rel="noopener noreferrer">情報処理安全確保支援士試験ドットコム</a>）で確認できます。
+          </p>
+          <div class="quiz-stats-grid" id="quizStatsGrid"></div>
+
+          <div class="quiz-start-form">
+            <div>
+              <label class="input-label" for="libExam">試験</label>
+              <select id="libExam" class="simple-input">
+                <option value="all">両方</option>
+                <option value="sc">支援士 午前II</option>
+                <option value="ap">応用情報 午前</option>
+              </select>
+            </div>
+            <div>
+              <label class="input-label" for="libSession">回</label>
+              <select id="libSession" class="simple-input">
+                <option value="all">5年分すべて</option>
+              </select>
+            </div>
+            <div>
+              <label class="input-label" for="libMode">出題</label>
+              <select id="libMode" class="simple-input">
+                <option value="mix">復習 → 新しい問題</option>
+                <option value="new">新しい問題だけ</option>
+                <option value="review">復習だけ</option>
+              </select>
+            </div>
+            <div>
+              <label class="input-label" for="libCount">問題数</label>
+              <select id="libCount" class="simple-input">
+                <option value="10">10問</option>
+                <option value="20">20問</option>
+                <option value="30">30問</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn btn-primary" id="btnLibStartQuiz" type="button">▶ 一問一答を始める</button>
+        </div>
+
+        <div class="card">
+          <div class="card-title-row">
+            <h3 class="card-heading">🤖 AI 大手のレポート・論文を読む</h3>
+            <span class="count-label" id="readingCount"></span>
+          </div>
+          <p class="text-desc">Anthropic・OpenAI・Google・Meta・Microsoft などが公開している一次情報です。読む観点とアウトプットが決まっているので、読んだら要点を書いて保存します。「できた」で保存すると読了になります。</p>
+          <div class="pill-group reading-filter" id="readingFilterPills">
+            <button class="pill active" data-val="todo">未読</button>
+            <button class="pill" data-val="all">すべて</button>
+            <button class="pill" data-val="done">読了</button>
+          </div>
+          <div class="reading-list" id="readingList"></div>
         </div>
       </section>
 
@@ -221,6 +330,14 @@
         <div class="panel-header">
           <h2>復習・再挑戦</h2>
           <p class="panel-sub">できなかった問題を、解説を見ずにもう一度解きます。正解すると「克服済み」になりリストから消えます。</p>
+        </div>
+
+        <div class="card quiz-review-card" id="quizReviewCard" hidden>
+          <div>
+            <h3 class="card-heading">📝 一問一答の復習</h3>
+            <p class="text-desc" id="quizReviewText"></p>
+          </div>
+          <button class="btn btn-primary btn-sm" id="btnQuizReview" type="button">復習する</button>
         </div>
 
         <div class="review-items-container" id="reviewItemsContainer"></div>
