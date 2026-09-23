@@ -1,7 +1,7 @@
-// 今日の学習クエスト - フロントエンド制御スクリプト
+// 今日の学習クエスト - シンプル版フロントエンドロジック
 
 const STATE = {
-  activeTab: 'home',
+  activeTab: 'quest',
   currentQuest: null,
   allCandidates: [],
   conditions: {
@@ -19,151 +19,85 @@ const STATE = {
 };
 
 const CATEGORY_NAMES = {
-  sc: '支援士 (SC)',
+  sc: '支援士',
   ai: 'AI',
   cloud: 'クラウド',
   security: 'セキュリティ'
 };
 
-// --- 初期化 ---
 document.addEventListener('DOMContentLoaded', async () => {
-  initNavigation();
-  initConditionSelectors();
-  initTimer();
-  initForms();
-  initSettings();
-  initSubTabs();
+  initTabs();
+  initFilterPills();
+  initHeroActions();
+  initRunMode();
+  initSettingsAndForms();
 
-  // 初期ステータス取得 & クエスト推薦
+  // 初期データ読み込み
   await checkJevStatus();
   await loadRecommendedQuest();
-  await refreshDashboardStats();
+  await updateReviewBadge();
 });
 
-// --- ナビゲーション ---
-function initNavigation() {
-  const navBtns = document.querySelectorAll('.nav-item');
-  navBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const tabId = btn.getAttribute('data-tab');
-      switchTab(tabId);
+// --- 1. タブナビゲーション ---
+function initTabs() {
+  const tabs = document.querySelectorAll('.nav-tab');
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const target = tab.getAttribute('data-tab');
+      switchTab(target);
     });
   });
-
-  document.getElementById('btnBackToHome')?.addEventListener('click', () => switchTab('home'));
-  document.getElementById('btnGoToRecords')?.addEventListener('click', () => switchTab('records'));
 }
 
-function switchTab(tabId) {
-  STATE.activeTab = tabId;
-
-  // ナビボタンのハイライト
-  document.querySelectorAll('.nav-item').forEach(b => {
-    b.classList.toggle('active', b.getAttribute('data-tab') === tabId);
+function switchTab(tabName) {
+  STATE.activeTab = tabName;
+  document.querySelectorAll('.nav-tab').forEach(t => {
+    t.classList.toggle('active', t.getAttribute('data-tab') === tabName);
   });
-
-  // ペインの切り替え
-  document.querySelectorAll('.tab-pane').forEach(p => {
+  document.querySelectorAll('.view-panel').forEach(p => {
     p.classList.remove('active');
   });
-  const targetPane = document.getElementById(`tab-${tabId}`);
-  if (targetPane) targetPane.classList.add('active');
+  const targetView = document.getElementById(`view-${tabName}`);
+  if (targetView) targetView.classList.add('active');
 
-  // タブに応じた更新
-  if (tabId === 'home') {
-    refreshDashboardStats();
-  } else if (tabId === 'records') {
-    loadLearningRecords();
-  } else if (tabId === 'register') {
-    loadRegisteredItems();
-  } else if (tabId === 'settings') {
+  if (tabName === 'review') {
+    loadReviewList();
+  } else if (tabName === 'settings') {
     checkJevStatus();
+  } else if (tabName === 'quest') {
+    updateReviewBadge();
   }
 }
 
-// --- 条件セレクター制御 ---
-function initConditionSelectors() {
-  setupButtonGroup('timeSelector', val => {
+// --- 2. ピル選択 (時間 & 分野) ---
+function initFilterPills() {
+  setupPills('timePills', val => {
     STATE.conditions.minutes = parseInt(val, 10);
     loadRecommendedQuest();
   });
 
-  setupButtonGroup('catSelector', val => {
+  setupPills('catPills', val => {
     STATE.conditions.category = val;
     loadRecommendedQuest();
   });
-
-  setupButtonGroup('goalSelector', val => {
-    STATE.conditions.goal = val;
-    loadRecommendedQuest();
-  });
-
-  document.getElementById('btnRefreshRecommend').addEventListener('click', () => {
-    loadRecommendedQuest();
-  });
-
-  document.getElementById('btnShowCandidates').addEventListener('click', () => {
-    openCandidatesModal();
-  });
-
-  document.getElementById('btnCloseModal').addEventListener('click', () => {
-    document.getElementById('candidatesModal').style.display = 'none';
-  });
-
-  document.getElementById('btnStartQuest').addEventListener('click', () => {
-    if (STATE.currentQuest) {
-      startQuestRun(STATE.currentQuest);
-    }
-  });
 }
 
-function setupButtonGroup(containerId, onChange) {
+function setupPills(containerId, onChange) {
   const container = document.getElementById(containerId);
   if (!container) return;
-  const buttons = container.querySelectorAll('.btn-option');
-  buttons.forEach(btn => {
-    btn.addEventListener('click', () => {
-      buttons.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      onChange(btn.getAttribute('data-value'));
+  const pills = container.querySelectorAll('.pill');
+  pills.forEach(p => {
+    p.addEventListener('click', () => {
+      pills.forEach(item => item.classList.remove('active'));
+      p.classList.add('active');
+      onChange(p.getAttribute('data-val'));
     });
   });
 }
 
-// --- Jev接続状況の確認 ---
-async function checkJevStatus() {
-  const dot = document.getElementById('jevStatusDot');
-  const text = document.getElementById('jevStatusText');
-  const bannerIcon = document.getElementById('bannerStatusIcon');
-  const bannerTitle = document.getElementById('bannerStatusTitle');
-  const bannerDesc = document.getElementById('bannerStatusDesc');
-
-  try {
-    const res = await fetch('/api/status');
-    const data = await res.json();
-
-    if (data.jevConfigured) {
-      dot.className = 'indicator-dot active';
-      text.textContent = 'Jev判断: 接続中 (Choice/Score/Noul)';
-      if (bannerIcon) bannerIcon.textContent = '🟢';
-      if (bannerTitle) bannerTitle.textContent = 'Jev API 接続確立 (環境変数 JEV_API_KEY 設定済)';
-      if (bannerDesc) bannerDesc.textContent = 'クエスト選定 (Choice) および理解度・復習判定 (Score/Noul) でJev判断モデルがアクティブです。文章生成は行いません。';
-    } else {
-      dot.className = 'indicator-dot inactive';
-      text.textContent = 'Jev: 未設定 (ルールベース動作)';
-      if (bannerIcon) bannerIcon.textContent = '⚪';
-      if (bannerTitle) bannerTitle.textContent = 'Jev API キー未設定 (ルールベースで完全動作中)';
-      if (bannerDesc) bannerDesc.textContent = '環境変数 JEV_API_KEY が未設定です。アプリ内のルールベース提案エンジンと固定判定ルールで全機能が問題なく動作しています。';
-    }
-  } catch (err) {
-    dot.className = 'indicator-dot inactive';
-    text.textContent = 'サーバー通信エラー';
-  }
-}
-
-// --- クエスト推薦の取得 ---
+// --- 3. クエスト推薦と表示 ---
 async function loadRecommendedQuest() {
-  const titleEl = document.getElementById('recTitle');
+  const titleEl = document.getElementById('heroTitle');
   titleEl.textContent = '最適なクエストを選定中...';
 
   try {
@@ -175,250 +109,219 @@ async function loadRecommendedQuest() {
     const data = await res.json();
 
     if (!data.quest) {
-      titleEl.textContent = '利用可能なクエスト候補が見つかりませんでした';
+      titleEl.textContent = '候補が見つかりませんでした。';
       return;
     }
 
     STATE.currentQuest = data.quest;
     STATE.currentQuest.decisionSource = data.decisionSource;
-    STATE.currentQuest.decisionNote = data.decisionNote;
     STATE.allCandidates = data.allCandidates || [];
 
-    renderRecommendedQuest(data.quest, data.decisionSource, data.decisionNote);
+    renderHeroQuest(data.quest, data.decisionSource);
   } catch (err) {
-    titleEl.textContent = 'クエスト取得中にエラーが発生しました';
-    console.error(err);
+    titleEl.textContent = 'クエストの取得に失敗しました';
   }
 }
 
-function renderRecommendedQuest(quest, decisionSource, decisionNote) {
-  document.getElementById('recTitle').textContent = quest.title;
-  document.getElementById('recCategory').textContent = CATEGORY_NAMES[quest.category] || quest.category.toUpperCase();
-  document.getElementById('recType').textContent = quest.type;
-  document.getElementById('recTime').textContent = `⏱️ ${quest.recommendedMinutes || STATE.conditions.minutes}分`;
-  document.getElementById('recSource').textContent = quest.sourceRef ? `出典 / 参照: ${quest.sourceRef}` : '';
-  document.getElementById('recReason').textContent = quest.reason;
-  document.getElementById('recCriteria').textContent = quest.criteria;
+function renderHeroQuest(quest, decisionSource) {
+  document.getElementById('heroTitle').textContent = quest.title;
+  document.getElementById('heroCategory').textContent = CATEGORY_NAMES[quest.category] || quest.category.toUpperCase();
+  document.getElementById('heroType').textContent = quest.type;
+  document.getElementById('heroTime').textContent = `⏱️ ${quest.recommendedMinutes || STATE.conditions.minutes}分`;
+  document.getElementById('heroSource').textContent = quest.sourceRef ? `出典: ${quest.sourceRef}` : '';
+  document.getElementById('heroReason').textContent = quest.reason;
+  document.getElementById('heroCriteria').textContent = quest.criteria;
 
-  const decisionBadge = document.getElementById('recDecisionSource');
+  const sourceTag = document.getElementById('heroDecisionSource');
   if (decisionSource === 'jev') {
-    decisionBadge.className = 'badge badge-decision jev';
-    decisionBadge.textContent = '🧠 [Jev判断 (Choice)]';
-  } else if (decisionSource === 'rule_fallback') {
-    decisionBadge.className = 'badge badge-decision rule';
-    decisionBadge.textContent = '🛡️ [ルールベース提案 (Jevフォールバック)]';
+    sourceTag.className = 'tag tag-source';
+    sourceTag.textContent = '🧠 Jev AI選定';
   } else {
-    decisionBadge.className = 'badge badge-decision rule';
-    decisionBadge.textContent = '📋 [ルールベース提案]';
+    sourceTag.className = 'tag tag-source rule';
+    sourceTag.textContent = '📋 ルール自動選定';
   }
+
+  // 実行カードと完了バナーを隠し、ヒーローカードを表示
+  document.getElementById('questHeroCard').style.display = 'block';
+  document.getElementById('questRunCard').style.display = 'none';
+  document.getElementById('completionBanner').style.display = 'none';
 }
 
-// --- 候補選択モーダル ---
+// --- 4. クエスト実行モード ---
+function initHeroActions() {
+  document.getElementById('btnStartHero').addEventListener('click', () => {
+    if (STATE.currentQuest) startQuestRun(STATE.currentQuest);
+  });
+
+  document.getElementById('btnChangeQuest').addEventListener('click', openCandidatesModal);
+  document.getElementById('btnCloseQuestList').addEventListener('click', () => {
+    document.getElementById('questListModal').style.display = 'none';
+  });
+
+  document.getElementById('btnCompNext').addEventListener('click', () => {
+    loadRecommendedQuest();
+  });
+}
+
 function openCandidatesModal() {
-  const container = document.getElementById('candidatesListContainer');
+  const container = document.getElementById('questListBody');
   container.innerHTML = '';
 
   if (STATE.allCandidates.length === 0) {
-    container.innerHTML = '<p class="text-muted">候補がありません</p>';
+    container.innerHTML = '<p class="text-muted">ほかの候補がありません</p>';
   } else {
     STATE.allCandidates.forEach(cand => {
-      const itemDiv = document.createElement('div');
-      itemDiv.className = 'candidate-item';
-      itemDiv.innerHTML = `
-        <div class="card-badge-row" style="margin-bottom:6px;">
-          <span class="badge badge-category">${CATEGORY_NAMES[cand.category] || cand.category}</span>
-          <span class="badge badge-type">${cand.type}</span>
-          <span class="badge badge-time">⏱️ ${cand.recommendedMinutes || 20}分</span>
+      const item = document.createElement('div');
+      item.className = 'modal-item';
+      item.innerHTML = `
+        <div style="display:flex;gap:6px;margin-bottom:4px;">
+          <span class="tag tag-cat">${CATEGORY_NAMES[cand.category] || cand.category}</span>
+          <span class="tag tag-type">${cand.type}</span>
+          <span class="tag tag-time">${cand.recommendedMinutes || 20}分</span>
         </div>
         <h4>${escapeHtml(cand.title)}</h4>
         <p>${escapeHtml(cand.reason)}</p>
       `;
-      itemDiv.addEventListener('click', () => {
+      item.addEventListener('click', () => {
         STATE.currentQuest = cand;
         STATE.currentQuest.decisionSource = 'manual';
-        STATE.currentQuest.decisionNote = 'ユーザーが候補一覧から手動で選択しました。';
-        renderRecommendedQuest(cand, 'manual', STATE.currentQuest.decisionNote);
-        document.getElementById('candidatesModal').style.display = 'none';
+        renderHeroQuest(cand, 'manual');
+        document.getElementById('questListModal').style.display = 'none';
       });
-      container.appendChild(itemDiv);
+      container.appendChild(item);
     });
   }
 
-  document.getElementById('candidatesModal').style.display = 'flex';
+  document.getElementById('questListModal').style.display = 'flex';
 }
 
-// --- クエスト実行開始 ---
 function startQuestRun(quest) {
-  // 画面のセットアップ
-  document.getElementById('runTitle').textContent = quest.title;
-  document.getElementById('runCategory').textContent = CATEGORY_NAMES[quest.category] || quest.category;
-  document.getElementById('runType').textContent = quest.type;
-  document.getElementById('runSourceRef').textContent = quest.sourceRef ? `出典: ${quest.sourceRef}` : '';
+  // ヒーローカードを隠し、実行カードを展開
+  document.getElementById('questHeroCard').style.display = 'none';
+  document.getElementById('completionBanner').style.display = 'none';
+  const runCard = document.getElementById('questRunCard');
+  runCard.style.display = 'block';
 
-  // 設問文・作業内容（※解説は事前に表示しない）
-  const promptBox = document.getElementById('runQuestionText');
+  document.getElementById('runTitle').textContent = quest.title;
+  document.getElementById('runCatTag').textContent = CATEGORY_NAMES[quest.category] || quest.category;
+  const minutes = quest.recommendedMinutes || STATE.conditions.minutes || 20;
+  document.getElementById('runTimeTag').textContent = `${minutes}分`;
+
+  // 設問文（解説なし）
+  const promptBox = document.getElementById('runPrompt');
   if (quest.type === '過去問を解く' || quest.type === '誤答を直す') {
     promptBox.textContent = quest.questionText || '過去問の設問に沿って、解説を見ずに答案を作成してください。';
     if (quest.previousMistake) {
-      promptBox.textContent = `【克服すべき前回の弱点】\n${quest.previousMistake}\n\n【設問文】\n` + (quest.questionText || '前回の設問に対して解説を見ずに再解答してください。');
+      promptBox.textContent = `【前回誤答した弱点】\n${quest.previousMistake}\n\n【設問文】\n` + (quest.questionText || '前回の設問に対して解説を見ずに再解答してください。');
     }
   } else {
-    promptBox.textContent = `【作業内容】\n${quest.title}\n\n【次の行動】\n${quest.nextAction || '実務への影響整理'}\n\n【メモ】\n${quest.notes || '公式ドキュメントや発表資料を確認し、要点と次の行動を完了してください。'}`;
+    promptBox.textContent = `【作業内容】\n${quest.title}\n\n【次の行動】\n${quest.nextAction || '実務への影響整理'}\n\n【要点】\n${quest.notes || '公式資料を確認し、実務での活用と次の行動を完了してください。'}`;
   }
 
-  document.getElementById('runCriteria').textContent = quest.criteria;
+  // 入力リセット
+  document.getElementById('inputAnswer').value = '';
+  document.getElementById('inputMistakeDetail').value = '';
 
-  const runDecision = document.getElementById('runDecisionSource');
-  if (quest.decisionSource === 'jev') {
-    runDecision.className = 'badge badge-decision jev';
-    runDecision.textContent = 'Jev選定';
-  } else {
-    runDecision.className = 'badge badge-decision rule';
-    runDecision.textContent = quest.decisionSource === 'manual' ? '手動選択' : 'ルール選定';
-  }
+  // 採点初期化 (正解)
+  setEvalState(true);
 
-  // フォームリセット
-  document.getElementById('runUserAnswer').value = '';
-  document.getElementById('runMistakeDetail').value = '';
-  document.getElementById('runGeneralNotes').value = '';
-  document.getElementById('runFormCard').style.display = 'block';
-  document.getElementById('completionCard').style.display = 'none';
+  // タイマースタート
+  startTimer(minutes);
 
-  // 正解/誤答セレクター初期化
-  setCorrectState(true);
-
-  // タイマー初期化
-  const minutes = quest.recommendedMinutes || STATE.conditions.minutes || 20;
-  resetTimer(minutes);
-
-  // クエスト実行中ドット表示
-  document.getElementById('activeQuestDot').style.display = 'inline-block';
-
-  // クエスト実行タブへ遷移
-  switchTab('quest-run');
+  // スクロール
+  runCard.scrollIntoView({ behavior: 'smooth' });
 }
 
-// --- タイマー ---
-function initTimer() {
-  const toggleBtn = document.getElementById('btnTimerToggle');
-  const resetBtn = document.getElementById('btnTimerReset');
+function initRunMode() {
+  // タイマー操作
+  document.getElementById('btnTimerPlayPause').addEventListener('click', toggleTimer);
 
-  toggleBtn.addEventListener('click', toggleTimer);
-  resetBtn.addEventListener('click', () => {
-    const min = STATE.currentQuest?.recommendedMinutes || STATE.conditions.minutes || 20;
-    resetTimer(min);
+  // 中断
+  document.getElementById('btnCancelRun').addEventListener('click', () => {
+    if (confirm('クエストを中断して戻りますか？')) {
+      stopTimer();
+      document.getElementById('questRunCard').style.display = 'none';
+      document.getElementById('questHeroCard').style.display = 'block';
+    }
   });
+
+  // 採点ピル
+  setupPills('evalPills', val => {
+    setEvalState(val === 'true');
+  });
+
+  // 誤答原因ピル
+  setupPills('mistakePills', val => {
+    STATE.mistakeReason = val;
+  });
+
+  // 完了ボタン
+  document.getElementById('btnCompleteQuest').addEventListener('click', handleCompleteQuest);
 }
 
-function updateTimerDisplay() {
-  const m = Math.floor(STATE.timer.remainingSeconds / 60);
-  const s = STATE.timer.remainingSeconds % 60;
-  document.getElementById('timerDisplay').textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+function setEvalState(isCorrect) {
+  STATE.isCorrect = isCorrect;
+  document.getElementById('mistakeDrawer').style.display = isCorrect ? 'none' : 'block';
+}
+
+function startTimer(minutes) {
+  stopTimer();
+  STATE.timer.remainingSeconds = minutes * 60;
+  STATE.timer.isRunning = true;
+  document.getElementById('btnTimerPlayPause').textContent = '⏸';
+  updateTimerText();
+
+  STATE.timer.intervalId = setInterval(() => {
+    if (STATE.timer.remainingSeconds > 0) {
+      STATE.timer.remainingSeconds--;
+      updateTimerText();
+    } else {
+      stopTimer();
+      alert('⏱️ 所要時間が終了しました！ 答案・メモと結果を記録しましょう。');
+    }
+  }, 1000);
 }
 
 function toggleTimer() {
-  const toggleBtn = document.getElementById('btnTimerToggle');
+  const btn = document.getElementById('btnTimerPlayPause');
   if (STATE.timer.isRunning) {
     clearInterval(STATE.timer.intervalId);
     STATE.timer.isRunning = false;
-    toggleBtn.textContent = '▶';
+    btn.textContent = '▶';
   } else {
     STATE.timer.isRunning = true;
-    toggleBtn.textContent = '⏸';
+    btn.textContent = '⏸';
     STATE.timer.intervalId = setInterval(() => {
       if (STATE.timer.remainingSeconds > 0) {
         STATE.timer.remainingSeconds--;
-        updateTimerDisplay();
+        updateTimerText();
       } else {
-        clearInterval(STATE.timer.intervalId);
-        STATE.timer.isRunning = false;
-        toggleBtn.textContent = '▶';
-        alert('⏱️ クエストの所要時間が終了しました。結果と気付きを記録しましょう！');
+        stopTimer();
       }
     }, 1000);
   }
 }
 
-function resetTimer(minutes) {
+function stopTimer() {
   clearInterval(STATE.timer.intervalId);
   STATE.timer.isRunning = false;
-  STATE.timer.remainingSeconds = minutes * 60;
-  document.getElementById('btnTimerToggle').textContent = '▶';
-  updateTimerDisplay();
+  document.getElementById('btnTimerPlayPause').textContent = '▶';
 }
 
-// --- 正誤・誤答原因セレクター ---
-function initForms() {
-  // 正解 / 誤答 切り替え
-  setupButtonGroup('isCorrectSelector', val => {
-    setCorrectState(val === 'true');
-  });
-
-  // 誤答原因セレクター
-  setupButtonGroup('mistakeReasonSelector', val => {
-    STATE.mistakeReason = val;
-  });
-
-  // クエスト完了送信
-  document.getElementById('btnFinishQuest').addEventListener('click', handleFinishQuest);
-
-  // 支援士 過去問登録フォーム
-  const formSC = document.getElementById('formRegisterSC');
-  formSC.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const payload = {
-      type: 'sc_past_paper',
-      category: 'sc',
-      title: document.getElementById('scTitle').value,
-      source: document.getElementById('scSource').value,
-      publishedDate: document.getElementById('scDate').value,
-      questionText: document.getElementById('scQuestionText').value,
-      notes: document.getElementById('scNotes').value,
-      nextAction: '既存知識と比較する',
-      practicalValue: 'high',
-      needsReview: true
-    };
-
-    await registerItem(payload, formSC);
-  });
-
-  // 技術キャッチアップ登録フォーム
-  const formCU = document.getElementById('formRegisterCatchup');
-  formCU.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const payload = {
-      type: 'catchup',
-      category: document.getElementById('cuCategory').value,
-      title: document.getElementById('cuTitle').value,
-      source: document.getElementById('cuSource').value,
-      url: document.getElementById('cuUrl').value,
-      publishedDate: document.getElementById('cuDate').value,
-      practicalValue: document.getElementById('cuPracticalValue').value,
-      nextAction: document.getElementById('cuNextAction').value,
-      notes: document.getElementById('cuNotes').value,
-      needsReview: false
-    };
-
-    await registerItem(payload, formCU);
-  });
+function updateTimerText() {
+  const m = Math.floor(STATE.timer.remainingSeconds / 60);
+  const s = STATE.timer.remainingSeconds % 60;
+  document.getElementById('timerClock').textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-function setCorrectState(isCorrect) {
-  STATE.isCorrect = isCorrect;
-  const mistakeSection = document.getElementById('mistakeSection');
-  if (mistakeSection) {
-    mistakeSection.style.display = isCorrect ? 'none' : 'block';
-  }
-}
-
-async function handleFinishQuest() {
-  if (!STATE.currentQuest) return;
-
-  const userAnswer = document.getElementById('runUserAnswer').value.trim();
-  if (!userAnswer) {
-    alert('答案または作業気付きメモを入力してください。');
+async function handleCompleteQuest() {
+  const ans = document.getElementById('inputAnswer').value.trim();
+  if (!ans) {
+    alert('答案または作業メモを入力してください。');
     return;
   }
+
+  stopTimer();
 
   const payload = {
     itemId: STATE.currentQuest.itemId || null,
@@ -429,11 +332,10 @@ async function handleFinishQuest() {
     reason: STATE.currentQuest.reason,
     criteria: STATE.currentQuest.criteria,
     decisionSource: STATE.currentQuest.decisionSource,
-    userAnswer: userAnswer,
+    userAnswer: ans,
     isCorrect: STATE.isCorrect,
     mistakeReason: STATE.isCorrect ? '' : STATE.mistakeReason,
-    mistakeDetail: document.getElementById('runMistakeDetail').value.trim(),
-    notes: document.getElementById('runGeneralNotes').value.trim()
+    mistakeDetail: document.getElementById('inputMistakeDetail').value.trim()
   };
 
   try {
@@ -449,47 +351,234 @@ async function handleFinishQuest() {
       return;
     }
 
-    // タイマーストップ & ドット非表示
-    clearInterval(STATE.timer.intervalId);
-    STATE.timer.isRunning = false;
-    document.getElementById('activeQuestDot').style.display = 'none';
+    // 実行カードを隠し、完了バナーを表示
+    document.getElementById('questRunCard').style.display = 'none';
+    const banner = document.getElementById('completionBanner');
+    banner.style.display = 'block';
 
-    // 完了カードの表示
-    document.getElementById('runFormCard').style.display = 'none';
-    const compCard = document.getElementById('completionCard');
-    compCard.style.display = 'block';
+    const ev = data.evaluation || {};
+    const scoreMap = ['-', '基礎不足', '要復習', '概ね理解', '完璧'];
+    document.getElementById('compScoreTag').textContent = `理解度(Score): ${scoreMap[ev.understandingScore] || ev.understandingScore}`;
+    document.getElementById('compReviewTag').textContent = ev.needsReview ? '復習(Noul): ⚠️数日後に再挑戦' : '復習(Noul): ✨習得済み';
+    document.getElementById('compSourceTag').textContent = ev.decisionSource === 'jev' ? '判定: Jev AI' : '判定: ルール';
 
-    const evalData = data.evaluation || {};
-    const scoreDescriptions = ['-', '1 (基礎知識不足)', '2 (要復習)', '3 (概ね理解)', '4 (完璧に理解)'];
-    document.getElementById('evalScoreText').textContent = scoreDescriptions[evalData.understandingScore] || `${evalData.understandingScore} / 4`;
-    document.getElementById('evalNoulText').textContent = evalData.needsReview ? '⚠️ 復習・再挑戦が必要' : '✨ 復習不要 (習得済み)';
-
-    const sourceBadge = document.getElementById('evalSourceBadge');
-    if (evalData.decisionSource === 'jev') {
-      sourceBadge.className = 'badge badge-decision jev';
-      sourceBadge.textContent = 'Jev Score & Noul';
-    } else {
-      sourceBadge.className = 'badge badge-decision rule';
-      sourceBadge.textContent = 'ルールベース評価';
-    }
-
-    const comment = evalData.needsReview
+    const msg = ev.needsReview
       ? (STATE.isCorrect
-          ? '正解しましたが、知識の定着を確実にするため数日後に復習クエストが組まれます。'
-          : `誤答原因【${STATE.mistakeReason}】を記録しました。数日後に解説を隠して再挑戦クエストを提案します。`)
-      : '十分に理解できています。次の新しいテーマに進みましょう！';
-    document.getElementById('evalComment').textContent = comment;
+          ? '正解しましたが、定着のため数日後に復習クエストが組まれます。'
+          : `誤答原因【${STATE.mistakeReason}】を記録しました。「弱点・復習」リストからいつでも再挑戦できます。`)
+      : '十分に理解できています。この調子で進めましょう！';
+    document.getElementById('compMessage').textContent = msg;
 
-    // ダッシュボード更新
-    refreshDashboardStats();
+    updateReviewBadge();
   } catch (err) {
-    alert('保存処理中にエラーが発生しました');
-    console.error(err);
+    alert('保存処理エラー');
   }
 }
 
-// --- アイテム登録 ---
-async function registerItem(payload, formEl) {
+// --- 5. 弱点・復習タブ ---
+async function loadReviewList() {
+  const container = document.getElementById('reviewItemsContainer');
+  const countsRow = document.getElementById('mistakeCountsRow');
+  container.innerHTML = '<p class="text-muted">読み込み中...</p>';
+
+  try {
+    const res = await fetch('/api/history');
+    const data = await res.json();
+    const history = data.history || [];
+
+    const pending = history.filter(h => !h.isCorrect && h.noulNeedsReview);
+
+    if (pending.length === 0) {
+      container.innerHTML = '<div class="card" style="padding:20px;text-align:center;color:#10b981;">🎉 現在、再挑戦待ちの弱点はありません！</div>';
+    } else {
+      container.innerHTML = pending.map(h => `
+        <div class="review-item-card">
+          <div class="review-item-main">
+            <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;">
+              <span class="tag tag-cat">${CATEGORY_NAMES[h.category] || h.category}</span>
+              <span class="mistake-badge">原因: ${escapeHtml(h.mistakeReason || '誤答')}</span>
+            </div>
+            <h4>${escapeHtml(h.title)}</h4>
+            <div class="review-item-meta">
+              <span>詳細: ${escapeHtml(h.mistakeDetail || 'なし')}</span>
+              <span>演習日: ${h.completedAt ? h.completedAt.slice(0, 10) : '-'}</span>
+            </div>
+          </div>
+          <button class="btn btn-primary btn-sm btn-re-try" data-hid="${h.id}">解説なしで再挑戦 🚀</button>
+        </div>
+      `).join('');
+
+      container.querySelectorAll('.btn-re-try').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const hid = btn.getAttribute('data-hid');
+          const target = history.find(item => item.id === hid);
+          if (target) {
+            switchTab('quest');
+            startQuestRun({
+              type: '誤答を直す',
+              category: target.category,
+              title: `【再挑戦】${target.title}の弱点克服`,
+              sourceRef: '前回の誤答記録',
+              questionText: target.userAnswer ? `【前回のあなたの答案】\n${target.userAnswer}\n\n前回の誤答原因「${target.mistakeReason}」を踏まえ、解説を見ずに正しい答案を作成してください。` : '',
+              previousMistake: `${target.mistakeReason}: ${target.mistakeDetail || ''}`,
+              recommendedMinutes: 20,
+              reason: '前回の誤答原因を克服するため、解説を見ずに再挑戦します。',
+              criteria: '前回の誤答箇所を修正し、設問要求を満たす正確な解答ができること。',
+              itemId: target.itemId,
+              decisionSource: 'manual'
+            });
+          }
+        });
+      });
+    }
+
+    // 誤答原因の集計
+    const counts = { '読み落とし': 0, '知識不足': 0, '設問要求とのずれ': 0, '時間不足': 0 };
+    history.forEach(h => {
+      if (!h.isCorrect && h.mistakeReason && counts[h.mistakeReason] !== undefined) {
+        counts[h.mistakeReason]++;
+      }
+    });
+
+    countsRow.innerHTML = Object.entries(counts).map(([name, count]) => `
+      <div class="mistake-count-box">
+        <div class="mistake-name">${name}</div>
+        <div class="mistake-num">${count}回</div>
+      </div>
+    `).join('');
+
+  } catch (err) {
+    container.innerHTML = '<p class="text-muted">取得に失敗しました</p>';
+  }
+}
+
+async function updateReviewBadge() {
+  try {
+    const res = await fetch('/api/history');
+    const data = await res.json();
+    const history = data.history || [];
+    const pendingCount = history.filter(h => !h.isCorrect && h.noulNeedsReview).length;
+    const badge = document.getElementById('reviewCountBadge');
+    if (pendingCount > 0) {
+      badge.textContent = pendingCount;
+      badge.style.display = 'inline-block';
+    } else {
+      badge.style.display = 'none';
+    }
+  } catch (e) {}
+}
+
+// --- 6. 設定 & Jev接続 & 素材登録 ---
+function initSettingsAndForms() {
+  // Jevキー保存
+  document.getElementById('btnSaveJevKey').addEventListener('click', async () => {
+    const key = document.getElementById('txtJevKey').value;
+    try {
+      const res = await fetch('/api/settings/jev-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: key })
+      });
+      const data = await res.json();
+      alert(data.message || '更新しました');
+      checkJevStatus();
+    } catch (e) {
+      alert('保存に失敗しました');
+    }
+  });
+
+  // Jev接続テスト
+  document.getElementById('btnTestJev').addEventListener('click', async () => {
+    const key = document.getElementById('txtJevKey').value;
+    const resultBox = document.getElementById('jevTestResult');
+    resultBox.style.display = 'block';
+    resultBox.className = 'jev-test-result';
+    resultBox.textContent = 'Jev API (POST https://api.typesafe.ai/v1/systemone) へ接続確認中...';
+
+    try {
+      const res = await fetch('/api/settings/test-jev', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: key })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        resultBox.className = 'jev-test-result success';
+        resultBox.innerHTML = `✅ <strong>Jev API 接続成功！</strong> (応答時間: ${data.elapsedMs}ms)<br>Jev判断モデルが正常に応答しました。今後のクエスト選定(Choice)と評価(Score/Noul)に適用されます。`;
+        checkJevStatus();
+      } else {
+        resultBox.className = 'jev-test-result error';
+        resultBox.innerHTML = `⚠️ <strong>接続失敗:</strong> ${escapeHtml(data.error || '通信エラー')}<br><small style="color:#cbd5e1;">※キーが無効・エラーの場合でも、アプリは安全なルールベース判断に自動フォールバックして問題なく使えます。</small>`;
+      }
+    } catch (err) {
+      resultBox.className = 'jev-test-result error';
+      resultBox.textContent = `通信エラー: ${err.message}`;
+    }
+  });
+
+  // サブタブ切り替え (素材登録)
+  document.querySelectorAll('.subtab').forEach(st => {
+    st.addEventListener('click', () => {
+      document.querySelectorAll('.subtab').forEach(b => b.classList.remove('active'));
+      st.classList.add('active');
+      const target = st.getAttribute('data-sub');
+      document.getElementById('formSimpleSC').classList.toggle('active', target === 'sub-sc');
+      document.getElementById('formSimpleCU').classList.toggle('active', target === 'sub-cu');
+    });
+  });
+
+  // 支援士登録
+  document.getElementById('formSimpleSC').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const payload = {
+      type: 'sc_past_paper',
+      category: 'sc',
+      title: document.getElementById('inScTitle').value.trim(),
+      source: document.getElementById('inScSource').value.trim(),
+      publishedDate: document.getElementById('inScDate').value,
+      questionText: document.getElementById('inScQuestion').value.trim(),
+      notes: document.getElementById('inScNotes').value.trim(),
+      nextAction: '既存知識と比較する'
+    };
+    await postItem(payload, e.target);
+  });
+
+  // キャッチアップ登録
+  document.getElementById('formSimpleCU').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const payload = {
+      type: 'catchup',
+      category: document.getElementById('inCuCat').value,
+      title: document.getElementById('inCuTitle').value.trim(),
+      source: document.getElementById('inCuSource').value.trim(),
+      nextAction: document.getElementById('inCuAction').value,
+      notes: document.getElementById('inCuNotes').value.trim()
+    };
+    await postItem(payload, e.target);
+  });
+
+  // バックアップ
+  document.getElementById('btnExportJson').addEventListener('click', () => {
+    window.location.href = '/api/backup';
+  });
+
+  // サンプル削除
+  document.getElementById('btnResetSamples').addEventListener('click', async () => {
+    if (!confirm('架空のサンプルデータを削除しますか？（ご自身の登録データは残ります）')) return;
+    const res = await fetch('/api/seed', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'clear_samples' })
+    });
+    const d = await res.json();
+    alert(d.message || '完了しました');
+    loadRecommendedQuest();
+    updateReviewBadge();
+  });
+}
+
+async function postItem(payload, formEl) {
   try {
     const res = await fetch('/api/registered-items', {
       method: 'POST',
@@ -498,290 +587,31 @@ async function registerItem(payload, formEl) {
     });
     const data = await res.json();
     if (data.success) {
-      alert('学習素材を登録しました！ 今後のクエスト推薦候補に含まれます。');
+      alert('登録しました！ 今後のクエスト推薦候補に加わります。');
       formEl.reset();
-      loadRegisteredItems();
       loadRecommendedQuest();
-      refreshDashboardStats();
     } else {
-      alert(data.error || '登録に失敗しました');
+      alert(data.error || '登録失敗');
     }
-  } catch (err) {
-    alert('通信エラーが発生しました');
-  }
-}
-
-// --- 登録アイテム一覧表示 ---
-async function loadRegisteredItems() {
-  const container = document.getElementById('registeredItemsList');
-  try {
-    const res = await fetch('/api/registered-items');
-    const data = await res.json();
-    const items = data.items || [];
-
-    if (items.length === 0) {
-      container.innerHTML = '<p class="text-muted">登録された素材はありません。</p>';
-      return;
-    }
-
-    container.innerHTML = items.map(item => {
-      const sampleBadge = item.isSample ? '<span class="badge" style="background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b44;">架空サンプル</span>' : '';
-      const actionBadge = item.nextAction ? `<span class="next-action-tag">次: ${escapeHtml(item.nextAction)}</span>` : '';
-      return `
-        <div class="item-row">
-          <div class="item-title-col">
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
-              <span class="badge badge-category">${CATEGORY_NAMES[item.category] || item.category}</span>
-              ${sampleBadge}
-              ${actionBadge}
-            </div>
-            <h5>${escapeHtml(item.title)}</h5>
-            <div class="item-meta">
-              <span>出典: ${escapeHtml(item.source || 'なし')}</span>
-              ${item.url ? `<span><a href="${item.url}" target="_blank" style="color:#60a5fa;text-decoration:none;">URL↗</a></span>` : ''}
-              <span>登録日: ${item.createdAt ? item.createdAt.slice(0, 10) : '-'}</span>
-            </div>
-          </div>
-        </div>
-      `;
-    }).join('');
-  } catch (err) {
-    container.innerHTML = '<p class="text-muted">一覧取得失敗</p>';
-  }
-}
-
-// --- 学習記録 & 弱点分析画面 ---
-async function loadLearningRecords() {
-  const pendingContainer = document.getElementById('pendingReviewList');
-  const mistakeGrid = document.getElementById('mistakeAnalysisGrid');
-  const historyTable = document.getElementById('historyTableBody');
-  const filterCat = document.getElementById('historyFilterCategory').value;
-
-  try {
-    const res = await fetch('/api/history');
-    const data = await res.json();
-    const history = data.history || [];
-
-    // 1. 再挑戦待ちリストの抽出 (誤答かつ復習フラグあり)
-    const pending = history.filter(h => !h.isCorrect && h.noulNeedsReview);
-    document.getElementById('pendingCountBadge').textContent = `${pending.length}件`;
-
-    if (pending.length === 0) {
-      pendingContainer.innerHTML = '<p style="color:#94a3b8;font-size:13px;padding:8px 0;">現在、再挑戦待ちの弱点はありません。順調です！✨</p>';
-    } else {
-      pendingContainer.innerHTML = pending.map(h => `
-        <div class="pending-item">
-          <div class="pending-item-info">
-            <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;">
-              <span class="badge badge-category">${CATEGORY_NAMES[h.category] || h.category}</span>
-              <span class="mistake-tag">弱点原因: ${escapeHtml(h.mistakeReason || '誤答')}</span>
-            </div>
-            <h4>${escapeHtml(h.title)}</h4>
-            <div class="pending-item-meta">
-              <span>前回演習: ${h.completedAt ? h.completedAt.slice(0, 10) : '-'}</span>
-              <span>詳細: ${escapeHtml(h.mistakeDetail || 'なし')}</span>
-            </div>
-          </div>
-          <button class="btn btn-secondary btn-retry-quest" data-histid="${h.id}">解説なしで再挑戦 🚀</button>
-        </div>
-      `).join('');
-
-      // 再挑戦ボタンイベント設定
-      pendingContainer.querySelectorAll('.btn-retry-quest').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const histId = btn.getAttribute('data-histid');
-          const targetHist = history.find(h => h.id === histId);
-          if (targetHist) {
-            startQuestRun({
-              type: '誤答を直す',
-              category: targetHist.category,
-              title: `【再挑戦】${targetHist.title}の弱点克服`,
-              sourceRef: '前回の誤答記録',
-              questionText: targetHist.userAnswer ? `【前回のあなたの答案】\n${targetHist.userAnswer}\n\n前回の誤答原因「${targetHist.mistakeReason}」を踏まえ、解説を見ずに正しい答案を作成してください。` : '',
-              previousMistake: `${targetHist.mistakeReason}: ${targetHist.mistakeDetail || ''}`,
-              recommendedMinutes: 20,
-              reason: '前回の誤答原因を克服するため、解説を見ずに再挑戦します。',
-              criteria: '前回の誤答箇所を修正し、設問要求を満たす正確な記述または解答ができること。',
-              itemId: targetHist.itemId,
-              decisionSource: 'manual'
-            });
-          }
-        });
-      });
-    }
-
-    // 2. 誤答原因の集計
-    const mistakeCounts = {
-      '読み落とし': 0,
-      '知識不足': 0,
-      '設問要求とのずれ': 0,
-      '時間不足': 0
-    };
-    history.forEach(h => {
-      if (!h.isCorrect && h.mistakeReason && mistakeCounts[h.mistakeReason] !== undefined) {
-        mistakeCounts[h.mistakeReason]++;
-      }
-    });
-
-    mistakeGrid.innerHTML = Object.entries(mistakeCounts).map(([name, count]) => `
-      <div class="mistake-stat-box">
-        <span class="mistake-stat-name">${name}</span>
-        <span class="mistake-stat-count">${count}回</span>
-      </div>
-    `).join('');
-
-    // 3. 全履歴一覧テーブル
-    const filteredHistory = filterCat === 'all' ? history : history.filter(h => h.category === filterCat);
-    if (filteredHistory.length === 0) {
-      historyTable.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#94a3b8;">履歴がありません</td></tr>';
-    } else {
-      historyTable.innerHTML = filteredHistory.map(h => {
-        const isCor = h.isCorrect ? '<span style="color:#10b981;font-weight:700;">⭕ 正解</span>' : `<span style="color:#ef4444;font-weight:700;">❌ ${escapeHtml(h.mistakeReason || '誤答')}</span>`;
-        const decBadge = h.decisionSource === 'jev'
-          ? '<span class="badge badge-decision jev">Jev</span>'
-          : '<span class="badge badge-decision rule">ルール</span>';
-        const nextRev = h.nextReviewDate ? h.nextReviewDate.slice(5, 10) : '-';
-        return `
-          <tr>
-            <td>${h.completedAt ? h.completedAt.slice(5, 16).replace('T', ' ') : '-'}</td>
-            <td><span class="badge badge-category">${CATEGORY_NAMES[h.category] || h.category}</span></td>
-            <td>${escapeHtml(h.questType || '-')}</td>
-            <td><strong>${escapeHtml(h.title)}</strong></td>
-            <td>${h.minutes}分</td>
-            <td>${isCor}</td>
-            <td>${decBadge}</td>
-            <td>${nextRev}</td>
-          </tr>
-        `;
-      }).join('');
-    }
-  } catch (err) {
-    console.error(err);
-  }
-}
-
-// 履歴フィルター切り替え
-document.getElementById('historyFilterCategory')?.addEventListener('change', loadLearningRecords);
-
-// --- ダッシュボード統計 ---
-async function refreshDashboardStats() {
-  try {
-    const resH = await fetch('/api/history');
-    const dataH = await resH.json();
-    const history = dataH.history || [];
-
-    const resI = await fetch('/api/registered-items');
-    const dataI = await resI.json();
-    const items = dataI.items || [];
-
-    // 今週完了数 (直近7日)
-    const sevenDaysAgo = new Date(Date.now() - 7 * 86400000);
-    const completedThisWeek = history.filter(h => new Date(h.completedAt) >= sevenDaysAgo).length;
-
-    // 再挑戦待ち
-    const pendingCount = history.filter(h => !h.isCorrect && h.noulNeedsReview).length;
-
-    document.getElementById('statCompletedTotal').textContent = completedThisWeek;
-    document.getElementById('statPendingReviews').textContent = pendingCount;
-    document.getElementById('statRegisteredItems').textContent = items.length;
-
-    // サンプルバッジ
-    const hasSample = items.some(i => i.isSample) || history.some(h => h.isSample);
-    const sampleBadge = document.getElementById('sampleNoticeBadge');
-    if (sampleBadge) {
-      sampleBadge.style.display = hasSample ? 'inline-block' : 'none';
-      sampleBadge.innerHTML = hasSample ? '<span>🏷️ 架空サンプル読込中</span>' : '<span>✅ 実データのみ</span>';
-    }
-  } catch (err) {
-    console.error(err);
-  }
-}
-
-// --- 情報登録サブタブ ---
-function initSubTabs() {
-  const subtabs = document.querySelectorAll('.subtab-btn');
-  subtabs.forEach(btn => {
-    btn.addEventListener('click', () => {
-      subtabs.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-
-      const targetId = btn.getAttribute('data-subtab');
-      document.getElementById('formRegisterSC').classList.toggle('active', targetId === 'reg-sc');
-      document.getElementById('formRegisterCatchup').classList.toggle('active', targetId === 'reg-catchup');
-    });
-  });
-}
-
-// --- 設定・バックアップ管理 ---
-function initSettings() {
-  // サンプル再投入
-  document.getElementById('btnAddSamples').addEventListener('click', async () => {
-    if (!confirm('架空のサンプルデータを追加しますか？')) return;
-    await sendSeedAction('add_samples');
-  });
-
-  // サンプル全削除
-  document.getElementById('btnClearSamples').addEventListener('click', async () => {
-    if (!confirm('架空のサンプルデータのみを全て削除しますか？（ご自身で登録した実データは残ります）')) return;
-    await sendSeedAction('clear_samples');
-  });
-
-  // 全初期化
-  document.getElementById('btnResetAll').addEventListener('click', async () => {
-    if (!confirm('データを初期状態にリセットしますか？')) return;
-    await sendSeedAction('reset_all');
-  });
-
-  // エクスポート
-  document.getElementById('btnExportData').addEventListener('click', () => {
-    window.location.href = '/api/backup';
-  });
-
-  // インポート
-  const fileInput = document.getElementById('fileImportData');
-  fileInput.addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      try {
-        const jsonData = JSON.parse(ev.target.result);
-        const res = await fetch('/api/backup', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(jsonData)
-        });
-        const result = await res.json();
-        if (result.success) {
-          alert('バックアップデータを正常に復元しました！');
-          refreshDashboardStats();
-          loadRecommendedQuest();
-        } else {
-          alert(result.error || '復元に失敗しました');
-        }
-      } catch (err) {
-        alert('無効なJSONファイルです');
-      }
-    };
-    reader.readAsText(file);
-  });
-}
-
-async function sendSeedAction(action) {
-  try {
-    const res = await fetch('/api/seed', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action })
-    });
-    const data = await res.json();
-    alert(data.message || '完了しました');
-    refreshDashboardStats();
-    loadRecommendedQuest();
-    loadRegisteredItems();
   } catch (err) {
     alert('通信エラー');
+  }
+}
+
+async function checkJevStatus() {
+  const tag = document.getElementById('jevStatusTag');
+  try {
+    const res = await fetch('/api/status');
+    const data = await res.json();
+    if (data.jevConfigured) {
+      tag.className = 'status-indicator-tag active';
+      tag.textContent = '🟢 Jev AI有効 (Choice/Score/Noul)';
+    } else {
+      tag.className = 'status-indicator-tag';
+      tag.textContent = '⚪ ルール動作中 (キー未設定)';
+    }
+  } catch (e) {
+    tag.textContent = 'エラー';
   }
 }
 

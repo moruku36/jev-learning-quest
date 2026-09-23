@@ -528,9 +528,93 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, {
         jevConfigured: hasKey,
         dataStorage: DATA_FILE,
-        version: '1.0.0'
+        version: '1.1.0'
       });
       return;
+    }
+
+    // 1-b. Jev APIキーの設定 / 削除
+    if (req.method === 'POST' && pathname === '/api/settings/jev-key') {
+      const body = await parseJsonBody(req);
+      if (body.apiKey !== undefined) {
+        process.env.JEV_API_KEY = body.apiKey.trim();
+      }
+      const hasKey = Boolean(process.env.JEV_API_KEY && process.env.JEV_API_KEY.trim());
+      sendJson(res, 200, {
+        success: true,
+        jevConfigured: hasKey,
+        message: hasKey ? 'Jev APIキーをセットしました' : 'Jev APIキーをクリアしました（ルールベース動作）'
+      });
+      return;
+    }
+
+    // 1-c. Jev API 接続テスト
+    if (req.method === 'POST' && pathname === '/api/settings/test-jev') {
+      const body = await parseJsonBody(req);
+      const testKey = body.apiKey ? body.apiKey.trim() : process.env.JEV_API_KEY;
+      if (!testKey) {
+        sendJson(res, 400, {
+          success: false,
+          error: 'APIキーが入力されていません。キーを入力するか、環境変数 JEV_API_KEY を設定してください。'
+        });
+        return;
+      }
+
+      // テスト用の質問を投げてみる
+      const endpoint = 'https://api.typesafe.ai/v1/systemone';
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const startTime = Date.now();
+
+      try {
+        const testRes = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${testKey}`
+          },
+          body: JSON.stringify({
+            model: 'jev-latest',
+            state: 'ユーザーがセキュリティ学習アプリの接続テストを実行中。',
+            questions: {
+              ping_check: {
+                type: 'noul',
+                instructions: '接続は正常ですか？'
+              }
+            }
+          }),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        const elapsedMs = Date.now() - startTime;
+
+        if (!testRes.ok) {
+          const errText = await testRes.text().catch(() => '');
+          sendJson(res, 200, {
+            success: false,
+            httpStatus: testRes.status,
+            error: `APIエラー (HTTP ${testRes.status}): ${errText.slice(0, 150)}`,
+            elapsedMs
+          });
+          return;
+        }
+
+        const resData = await testRes.json();
+        sendJson(res, 200, {
+          success: true,
+          elapsedMs,
+          answers: resData.answers,
+          message: `接続成功！ (応答時間: ${elapsedMs}ms)`
+        });
+        return;
+      } catch (err) {
+        clearTimeout(timeoutId);
+        sendJson(res, 200, {
+          success: false,
+          error: err.name === 'AbortError' ? 'タイムアウト (4秒)' : `通信エラー: ${err.message}`
+        });
+        return;
+      }
     }
 
     // 2. 今日のクエスト推薦 (Jev Choice or ルールベース)
