@@ -5,7 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Jev 学習クエスト</title>
   <meta name="description" content="判断AI Jev が「今日やる1つ」を選ぶ、支援士試験対策と技術キャッチアップのための学習アプリ">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%238b5cf6'/%3E%3Ctext x='16' y='23' font-size='20' font-family='sans-serif' font-weight='700' text-anchor='middle' fill='white'%3EJ%3C/text%3E%3C/svg%3E">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Jev学習">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
@@ -43,6 +48,7 @@
           <span class="jev-chip-dot"></span>
           <span id="jevChipText">Jev 確認中...</span>
         </button>
+        <span class="offline-chip" id="offlineChip" hidden>📴 オフライン</span>
         <div class="user-menu" id="userMenu" hidden>
           <span class="user-email" id="userEmail"></span>
           <button class="btn btn-ghost btn-sm" id="btnLogout" type="button">ログアウト</button>
@@ -65,6 +71,17 @@
 
       <!-- ================= 1. 今日のクエスト ================= -->
       <section id="view-quest" class="view-panel active">
+
+        <!-- オフライン時の案内 -->
+        <div class="setup-banner offline-banner" id="offlineBanner" hidden>
+          <div class="setup-banner-text">
+            <strong>📴 オフラインです</strong>
+            <p id="offlineBannerText">保存しておいた一問一答だけ解けます。結果は次にオンラインになったときに自動で保存されます。</p>
+          </div>
+          <div class="setup-banner-actions">
+            <button class="btn btn-primary btn-sm" id="btnOfflineQuiz" type="button">一問一答を始める</button>
+          </div>
+        </div>
 
         <!-- Jev 未設定時の案内 -->
         <div class="setup-banner" id="setupBanner" hidden>
@@ -173,6 +190,20 @@
             <div class="char-count" id="answerCharCount">0 文字</div>
           </div>
 
+          <!-- 記述式（過去問）の採点補助 -->
+          <div class="written-extra" id="writtenExtra" hidden>
+            <label for="inputKeywords" class="input-label">解答例のキーワード（任意・「、」区切り）</label>
+            <input type="text" id="inputKeywords" class="simple-input" placeholder="例: HttpOnly、XSS、セッションID">
+            <p class="field-hint">
+              解き終わったら<a class="run-link" id="runAnswerLink" href="#" target="_blank" rel="noopener noreferrer" hidden>解答例（IPA）↗</a>を見て、
+              キーワードを入れると答案に含まれているか照合します。
+            </p>
+            <details class="help-details">
+              <summary>設問文を貼り付ける（任意・Claude の添削の精度が上がります）</summary>
+              <textarea id="inputQuestionText" class="simple-input mt-8" rows="3" placeholder="例: 設問2(1) 本文中の下線①について、…を40字以内で述べよ。"></textarea>
+            </details>
+          </div>
+
           <div class="run-eval-section">
             <div class="eval-row">
               <span class="input-label">自己採点</span>
@@ -219,16 +250,28 @@
             </div>
             <p class="quiz-question" id="quizQuestion">-</p>
             <button class="btn btn-secondary btn-lg quiz-reveal" id="btnQuizReveal" type="button">答えを見る <kbd>Space</kbd></button>
+            <div class="quiz-choices" id="quizChoices" hidden></div>
             <div class="quiz-answer" id="quizAnswerBox" hidden>
-              <span class="box-label">💡 答え</span>
+              <span class="box-label" id="quizAnswerLabel">💡 答え</span>
               <p class="quiz-answer-text" id="quizAnswer"></p>
-              <a class="run-link" id="quizSourceLink" href="#" target="_blank" rel="noopener noreferrer">元の過去問と解説を見る ↗</a>
+              <div class="quiz-answer-links">
+                <a class="run-link" id="quizSourceLink" href="#" target="_blank" rel="noopener noreferrer">元の過去問と解説を見る ↗</a>
+                <button class="link-btn" id="btnQuizReport" type="button">⚠ この問題おかしい？</button>
+              </div>
+              <div class="quiz-report-form" id="quizReportForm" hidden>
+                <select id="quizReportReason" class="simple-input" aria-label="報告の理由"></select>
+                <input type="text" id="quizReportNote" class="simple-input" maxlength="500" placeholder="どこがおかしいか（任意）">
+                <button class="btn btn-secondary btn-sm" id="btnQuizReportSend" type="button">報告する</button>
+              </div>
             </div>
           </div>
 
           <div class="quiz-judge" id="quizJudge" hidden>
             <button class="btn btn-outline btn-lg" id="btnQuizWrong" type="button">❌ まだ <kbd>N</kbd></button>
             <button class="btn btn-primary btn-lg" id="btnQuizRight" type="button">⭕ 覚えてた <kbd>Y</kbd></button>
+          </div>
+          <div class="quiz-next" id="quizNext" hidden>
+            <button class="btn btn-primary btn-lg" id="btnQuizNext" type="button">次へ <kbd>Enter</kbd></button>
           </div>
 
           <div class="run-card-footer">
@@ -254,6 +297,17 @@
           <div class="answer-notes" id="compWrongBox" hidden>
             <span class="box-label">🔁 間違えた問題（明日もう一度出題されます）</span>
             <ul class="wrong-list" id="compWrongList"></ul>
+          </div>
+          <div class="answer-notes" id="compKeywordBox" hidden>
+            <span class="box-label">🔑 解答例のキーワード照合</span>
+            <div class="keyword-chips" id="compKeywordChips"></div>
+          </div>
+          <div class="answer-notes" id="compReviewBox" hidden>
+            <span class="box-label">✍️ 答案の振り返り</span>
+            <p class="comp-links"><a class="run-link" id="compAnswerLink" href="#" target="_blank" rel="noopener noreferrer" hidden>解答例（IPA）を開く ↗</a></p>
+            <button class="btn btn-jev btn-sm" id="btnClaudeReview" type="button">🤖 Claude に添削してもらう</button>
+            <p class="field-hint" id="claudeReviewHint"></p>
+            <div class="box-content review-result" id="compReviewResult" hidden></div>
           </div>
           <button class="btn btn-primary" id="btnCompNext">次のクエストへ</button>
         </div>
@@ -296,6 +350,20 @@
                 <option value="mix">復習 → 新しい問題</option>
                 <option value="new">新しい問題だけ</option>
                 <option value="review">復習だけ</option>
+                <option value="weak">弱点分野だけ</option>
+              </select>
+            </div>
+            <div>
+              <label class="input-label" for="libGroup">分野</label>
+              <select id="libGroup" class="simple-input">
+                <option value="all">すべての分野</option>
+              </select>
+            </div>
+            <div>
+              <label class="input-label" for="libFormat">形式</label>
+              <select id="libFormat" class="simple-input">
+                <option value="self">自己採点（⭕/❌）</option>
+                <option value="choice">4択</option>
               </select>
             </div>
             <div>
@@ -312,6 +380,41 @@
 
         <div class="card">
           <div class="card-title-row">
+            <h3 class="card-heading">📊 分野別の正答率</h3>
+            <button class="btn btn-secondary btn-sm" id="btnWeakQuiz" type="button" hidden>弱点分野を集中演習</button>
+          </div>
+          <p class="text-desc">一問一答の結果から、分野ごとの正答率を出しています（5回以上解いた分野だけ判定）。正答率が7割未満の分野は「弱点」として、今日のクエストでも優先されます。</p>
+          <div class="field-stats" id="fieldStatsList"></div>
+        </div>
+
+        <div class="card" id="reportCard" hidden>
+          <div class="card-title-row">
+            <h3 class="card-heading">⚠ 報告した問題 <span class="count-label" id="reportCount"></span></h3>
+            <button class="btn btn-secondary btn-sm" id="btnCopyReports" type="button">まとめてコピー</button>
+          </div>
+          <p class="text-desc">「この問題おかしい？」で報告した問題です。「まとめてコピー」で GitHub の Issue や Claude への修正依頼に貼り付けられる形になります。</p>
+          <div class="report-list" id="reportList"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title-row">
+            <h3 class="card-heading">✍️ 支援士 午後・科目B（記述式）</h3>
+            <span class="count-label" id="writtenCount"></span>
+          </div>
+          <p class="text-desc">
+            令和3年春期〜令和7年秋期の記述式の問題です。問題冊子と解答例は IPA 公式サイトの PDF で読みます（登録は不要です）。
+            答案を書いたら、解答例のキーワード照合と、Claude による添削（設定されている場合）で振り返れます。
+          </p>
+          <div class="pill-group reading-filter" id="writtenFilterPills">
+            <button class="pill active" data-val="todo">未着手</button>
+            <button class="pill" data-val="all">すべて</button>
+            <button class="pill" data-val="done">演習済み</button>
+          </div>
+          <div class="reading-list" id="writtenList"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title-row">
             <h3 class="card-heading">🤖 AI 大手のレポート・論文を読む</h3>
             <span class="count-label" id="readingCount"></span>
           </div>
@@ -322,6 +425,15 @@
             <button class="pill" data-val="done">読了</button>
           </div>
           <div class="reading-list" id="readingList"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title-row">
+            <h3 class="card-heading">🆕 AI の新着（公式ブログ・arXiv）</h3>
+            <span class="count-label" id="feedUpdated"></span>
+          </div>
+          <p class="text-desc">OpenAI・Google DeepMind・Google Research・Microsoft Security の公式ブログと、arXiv の「LLM × セキュリティ」の新着です（数時間ごとに更新）。気になったものを「素材に追加」すると、今日のクエストの候補になります。</p>
+          <div class="reading-list" id="feedList"><p class="text-muted">教材タブを開くと読み込みます</p></div>
         </div>
       </section>
 
@@ -368,7 +480,7 @@
 
           <!-- 支援士 -->
           <form id="formSimpleSC" class="simple-form active">
-            <p class="text-desc">著作権保護のため問題本文は同梱していません。出典と、解きたい設問を登録してください。</p>
+            <p class="text-desc">支援士の午後/科目B（令和3年〜令和7年）は「教材」タブから登録なしで演習できます。それ以外の問題や、設問単位で繰り返したいものをここに登録してください。</p>
             <div class="form-row">
               <label class="input-label" for="inScTitle">問題名 / テーマ <span class="req">*</span></label>
               <input type="text" id="inScTitle" class="simple-input" required placeholder="例: 令和5年秋期 科目B 問1 (Webセキュリティ)">
@@ -390,6 +502,14 @@
             <div class="form-row">
               <label class="input-label" for="inScNotes">解答ポイント（解き終わるまで表示されません）</label>
               <input type="text" id="inScNotes" class="simple-input" placeholder="例: HttpOnly属性。XSSによるCookie読み取りを防ぐ。">
+            </div>
+            <div class="form-row">
+              <label class="input-label" for="inScKeywords">採点キーワード（任意・「、」区切り。答案に含まれるか自動で照合します）</label>
+              <input type="text" id="inScKeywords" class="simple-input" placeholder="例: HttpOnly、XSS、JavaScript">
+            </div>
+            <div class="form-row">
+              <label class="input-label" for="inScUrl">問題の URL（任意）</label>
+              <input type="url" id="inScUrl" class="simple-input" placeholder="https://www.ipa.go.jp/...">
             </div>
             <button type="submit" class="btn btn-primary">過去問を登録</button>
           </form>

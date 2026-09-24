@@ -14,11 +14,42 @@ const BASE = `http://127.0.0.1:${PORT}`;
 const VALID_KEY = 'jev_test_valid_key_123456';
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jev-lq-test-'));
 
+// AI 新着のモック（RSS と Atom の両方）
+const MOCK_FEED_XML = `<?xml version="1.0"?>
+<rss version="2.0"><channel><title>Mock</title>
+<item><title><![CDATA[Mock AI Security Update]]></title><link>https://example.com/ai/security-update</link><description>Summary &amp; details</description><pubDate>Wed, 23 Sep 2026 10:00:00 GMT</pubDate></item>
+<item><title>Unsafe link</title><link>javascript:alert(1)</link><pubDate>Wed, 23 Sep 2026 09:00:00 GMT</pubDate></item>
+</channel></rss>`;
+
+// Claude API のモック（/v1/messages）。受け取ったリクエストを記録して、添削結果を返す
+const CLAUDE_TEST_KEY = 'sk-ant-test-key';
+const claudeRequests = [];
+
 // --- モック Jev API: VALID_KEY のみ受け付け、候補の先頭を選ぶ ---
 const mockJev = http.createServer((req, res) => {
   let body = '';
   req.on('data', c => { body += c; });
   req.on('end', () => {
+    if (req.url === '/feed.xml') {
+      res.writeHead(200, { 'Content-Type': 'application/rss+xml' });
+      res.end(MOCK_FEED_XML);
+      return;
+    }
+    if (req.url.startsWith('/v1/messages')) {
+      claudeRequests.push({ headers: req.headers, body: JSON.parse(body) });
+      if (req.headers['x-api-key'] !== CLAUDE_TEST_KEY) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end('{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}');
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        id: 'msg_test', type: 'message', role: 'assistant', model: 'claude-opus-5',
+        content: [{ type: 'text', text: '## 総合評価\nB（部分点が期待できる）' }],
+        stop_reason: 'end_turn', stop_sequence: null, usage: { input_tokens: 10, output_tokens: 10 }
+      }));
+      return;
+    }
     if (req.headers.authorization !== `Bearer ${VALID_KEY}`) {
       res.writeHead(401, { 'Content-Type': 'application/json' });
       res.end('{"error":"invalid api key"}');
@@ -215,6 +246,90 @@ async function runVerification() {
   assert.strictEqual(content3.quiz.stats.sc.studied, 5, 'バックアップから一問一答の進捗も復元される');
   console.log('✔ 一問一答の進捗もバックアップ・復元される');
 
+  console.log('\n=== [5-d] 分野別の正答率と弱点分野 ===');
+  const { QUIZ_CARDS } = require('./lib/content');
+  assert.ok(QUIZ_CARDS.every(c => c.field && c.group), 'すべての問題に分野（中分類）がある');
+  const netCards = QUIZ_CARDS.filter(c => c.group === 'network').slice(0, 6);
+  await post('/api/quiz/answers', { answers: netCards.map((c, i) => ({ id: c.id, correct: i === 0 })), title: '弱点テスト' });
+  const { data: content4 } = await get('/api/content');
+  const net = content4.quiz.fields.find(f => f.id === 'network');
+  assert.strictEqual(net.attempts, 6);
+  assert.strictEqual(net.weak, true, '正答率 1/6 のネットワークは弱点');
+  const { data: weakDeck } = await get('/api/quiz/deck?mode=weak&count=10');
+  assert.strictEqual(weakDeck.cards.length, 10);
+  assert.ok(weakDeck.cards.every(c => content4.quiz.fields.find(f => f.id === c.group).weak), '弱点分野の問題だけが出る');
+  const { data: groupDeck } = await get('/api/quiz/deck?group=database&count=5');
+  assert.ok(groupDeck.cards.every(c => c.group === 'database'));
+  const recWeak = await post('/api/quest/recommend', { minutes: 20, category: 'sc', goal: 'weakness' });
+  assert.ok(recWeak.data.allCandidates.some(c => c.id === 'quiz_weak' && c.quiz.mode === 'weak'), '弱点分野の集中演習が候補に入る');
+  console.log('✔ 分野ごとの正答率が集計され、弱点分野だけを出題できる');
+
+  console.log('\n=== [5-e] 4択と「この問題おかしい？」 ===');
+  const { data: choiceDeck } = await get('/api/quiz/deck?exam=sc&count=5&format=choice');
+  for (const c of choiceDeck.cards) {
+    assert.strictEqual(c.choices.length, 4);
+    assert.strictEqual(new Set(c.choices).size, 4, '選択肢は重複しない');
+    assert.ok(c.choices.includes(c.answer), '正解が選択肢に含まれる');
+  }
+  const reported = await post('/api/quiz/reports', { cardId: choiceDeck.cards[0].id, reason: '答えが間違っている', note: 'テスト' });
+  assert.strictEqual(reported.status, 201);
+  assert.strictEqual((await post('/api/quiz/reports', { cardId: 'no-such-card' })).status, 400);
+  const { data: content5 } = await get('/api/content');
+  assert.strictEqual(content5.quiz.reports.length, 1);
+  assert.strictEqual(content5.quiz.reports[0].card.id, choiceDeck.cards[0].id);
+  await post('/api/quiz/reports/delete', { reportId: reported.data.report.id });
+  assert.strictEqual((await get('/api/content')).data.quiz.reports.length, 0);
+  console.log('✔ 4択は正解を含む重複のない4つの選択肢になり、問題の報告・削除ができる');
+
+  console.log('\n=== [5-f] 支援士 午後/科目B と採点補助 ===');
+  assert.strictEqual(content5.written.length, 45, '令和3年春期〜令和7年秋期の午後I/午後II/科目B');
+  assert.ok(content5.written.every(w => /^https:\/\/www\.ipa\.go\.jp\/.+_qs\.pdf$/.test(w.questionPdf) && /_ans\.pdf$/.test(w.answerPdf)));
+  const recWritten = await post('/api/quest/recommend', { minutes: 60, category: 'sc', goal: 'exercise' });
+  const writtenCand = recWritten.data.allCandidates.find(c => c.id.startsWith('written_'));
+  assert.ok(writtenCand && writtenCand.url && writtenCand.answerUrl, '午後/科目B の過去問が登録なしで候補に入る');
+  const writtenRes = await post('/api/history', {
+    itemId: writtenCand.itemId, category: 'sc', questType: '過去問を解く', title: writtenCand.title,
+    userAnswer: '設問1: HttpOnly属性を付与し、ＸＳＳでのCookie窃取を防ぐ', isCorrect: false, mistakeReason: '知識不足',
+    keywords: 'HttpOnly、XSS、SameSite'
+  });
+  assert.deepStrictEqual(writtenRes.data.keywordResult.matched, ['HttpOnly', 'XSS'], '全角の「ＸＳＳ」も一致する');
+  assert.deepStrictEqual(writtenRes.data.keywordResult.missing, ['SameSite']);
+  // 復習期限（3日後）を過去にして、再挑戦の候補になることを確認する
+  const writtenStore = JSON.parse(fs.readFileSync(storeFile, 'utf8'));
+  writtenStore.history.find(h => h.id === writtenRes.data.history.id).nextReviewDate = new Date(Date.now() - 1000).toISOString();
+  fs.writeFileSync(storeFile, JSON.stringify(writtenStore));
+  const recWritten2 = await post('/api/quest/recommend', { minutes: 60, category: 'sc', goal: 'exercise' });
+  assert.ok(!recWritten2.data.allCandidates.some(c => c.id === writtenCand.id), '演習した問題は新規の候補から外れる');
+  const retryWritten = recWritten2.data.allCandidates.find(c => c.itemId === writtenCand.itemId && c.type === '誤答を直す');
+  assert.ok(retryWritten && retryWritten.url, '「できなかった」問題は問題冊子のリンク付きで再挑戦になる');
+  const noReview = await post('/api/review', { historyId: writtenRes.data.history.id });
+  assert.strictEqual(noReview.status, 503, 'ANTHROPIC_API_KEY が無いときは添削できない');
+  const { data: statusNoReview } = await get('/api/status');
+  assert.strictEqual(statusNoReview.reviewConfigured, false);
+  console.log('✔ 午後/科目B を登録なしで演習でき、キーワード照合の結果が返る');
+
+  console.log('\n=== [5-g] AI の新着 ===');
+  const { data: feed } = await get('/api/ai-feed');
+  assert.strictEqual(feed.items.length, 1, 'https 以外のリンクは除外');
+  assert.strictEqual(feed.items[0].title, 'Mock AI Security Update');
+  assert.strictEqual(feed.items[0].summary, 'Summary & details');
+  assert.strictEqual(feed.items[0].publishedAt, '2026-09-23T10:00:00.000Z');
+  const { parseFeed } = require('./lib/feeds');
+  const atom = parseFeed('<feed><entry><title>Atom Paper</title><link href="https://arxiv.org/abs/1234.5678v1" rel="alternate"/><published>2026-09-20T00:00:00Z</published><summary>abc</summary></entry></feed>', { id: 'a', name: 'arXiv' });
+  assert.deepStrictEqual([atom[0].title, atom[0].url], ['Atom Paper', 'https://arxiv.org/abs/1234.5678v1']);
+  console.log('✔ RSS / Atom の新着を読み、安全なリンクだけを返す');
+
+  console.log('\n=== [5-h] PWA ===');
+  const manifestRes = await fetch(`${BASE}/manifest.webmanifest`);
+  assert.strictEqual(manifestRes.status, 200);
+  assert.match(manifestRes.headers.get('content-type'), /manifest\+json/);
+  const manifest = await manifestRes.json();
+  assert.ok(manifest.icons.some(i => i.sizes === '512x512'));
+  for (const icon of manifest.icons) assert.strictEqual((await fetch(`${BASE}/${icon.src}`)).status, 200, icon.src);
+  const swText = await (await fetch(`${BASE}/sw.js`)).text();
+  assert.match(swText, /\/api\//, 'Service Worker は /api/ をキャッシュしない');
+  console.log('✔ マニフェスト・アイコン・Service Worker が配信される');
+
   console.log('\n=== [6] Jev APIキーの保存・マスク・削除 ===');
   const badTest = await post('/api/settings/test-jev', { apiKey: 'jev_wrong_key_000000' });
   assert.strictEqual(badTest.data.success, false);
@@ -380,9 +495,54 @@ async function runMisconfiguredVerification(base) {
   console.log('✔ Supabase 未設定の Vercel 環境では、ログインなしで使えてしまうことはなく全 API が 503');
 }
 
+// Claude による添削（@anthropic-ai/sdk がインストールされている環境 = CI / Vercel でのみ実行）
+async function runReviewVerification(base) {
+  console.log('\n=== [12] Claude による記述答案の添削 ===');
+  const call = async (p, body) => {
+    const res = await fetch(base + p, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    return { status: res.status, data: await res.json().catch(() => ({})) };
+  };
+  const status = await (await fetch(`${base}/api/status`)).json();
+  assert.strictEqual(status.reviewConfigured, true);
+  const saved = await call('/api/history', {
+    itemId: 'written:sc-07_aki-pm-1', category: 'sc', questType: '過去問を解く', title: '令和7年秋期 科目B 問1',
+    userAnswer: '設問1: 多要素認証を導入する', isCorrect: true, keywords: '多要素認証、条件付きアクセス',
+    questionText: '設問1 不正ログインを防ぐ対策を述べよ。'
+  });
+  const reviewed = await call('/api/review', { historyId: saved.data.history.id });
+  assert.strictEqual(reviewed.status, 200, JSON.stringify(reviewed.data));
+  assert.match(reviewed.data.review.feedback, /総合評価/);
+  const sent = claudeRequests[claudeRequests.length - 1];
+  assert.strictEqual(sent.body.model, 'claude-opus-5');
+  assert.strictEqual(sent.body.fallbacks, 'default');
+  assert.match(sent.headers['anthropic-beta'] || '', /server-side-fallback-2026-07-01/);
+  assert.deepStrictEqual(sent.body.thinking, { type: 'adaptive' });
+  const userText = JSON.stringify(sent.body.messages);
+  assert.ok(userText.includes('多要素認証を導入する') && userText.includes('不正ログインを防ぐ対策'), '答案と設問を送る');
+  const notFound = await call('/api/review', { historyId: 'no-such-history' });
+  assert.strictEqual(notFound.status, 404);
+  console.log('✔ Claude（claude-opus-5・フォールバック有効）で添削し、結果を学習記録に保存する');
+}
+
+function hasAnthropicSdk() {
+  try {
+    require.resolve('@anthropic-ai/sdk');
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 function startServer(port, env) {
   const proc = spawn(process.execPath, [path.join(__dirname, 'server.js')], {
-    env: { ...process.env, PORT: String(port), JEV_API_URL: `http://127.0.0.1:${MOCK_PORT}/v1/systemone`, ...env },
+    env: {
+      ...process.env,
+      PORT: String(port),
+      JEV_API_URL: `http://127.0.0.1:${MOCK_PORT}/v1/systemone`,
+      LQ_TEST_FEED_URL: `http://127.0.0.1:${MOCK_PORT}/feed.xml`,
+      ANTHROPIC_API_KEY: '',
+      ...env
+    },
     stdio: ['ignore', 'ignore', 'inherit']
   });
   return proc;
@@ -403,6 +563,8 @@ async function waitFor(base) {
 const MOCK_SB_PORT = 3997;
 const CLOUD_PORT = 3996;
 const BROKEN_PORT = 3995;
+const REVIEW_PORT = 3994;
+const reviewDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jev-lq-review-'));
 const procs = [];
 
 mockJev.listen(MOCK_PORT, '127.0.0.1', () => mockSupabase.listen(MOCK_SB_PORT, '127.0.0.1', async () => {
@@ -416,6 +578,16 @@ mockJev.listen(MOCK_PORT, '127.0.0.1', () => mockSupabase.listen(MOCK_SB_PORT, '
     VERCEL: ''
   }));
   procs.push(startServer(BROKEN_PORT, { ...clearCloudEnv, VERCEL: '1', JEV_API_KEY: '' }));
+  const reviewEnabled = hasAnthropicSdk();
+  if (reviewEnabled) {
+    procs.push(startServer(REVIEW_PORT, {
+      ...clearCloudEnv,
+      LQ_DATA_DIR: reviewDataDir,
+      JEV_API_KEY: '',
+      ANTHROPIC_API_KEY: CLAUDE_TEST_KEY,
+      ANTHROPIC_BASE_URL: `http://127.0.0.1:${MOCK_PORT}`
+    }));
+  }
 
   let exitCode = 0;
   try {
@@ -425,6 +597,12 @@ mockJev.listen(MOCK_PORT, '127.0.0.1', () => mockSupabase.listen(MOCK_SB_PORT, '
     await runCloudVerification(`http://127.0.0.1:${CLOUD_PORT}`);
     await waitFor(`http://127.0.0.1:${BROKEN_PORT}`);
     await runMisconfiguredVerification(`http://127.0.0.1:${BROKEN_PORT}`);
+    if (reviewEnabled) {
+      await waitFor(`http://127.0.0.1:${REVIEW_PORT}`);
+      await runReviewVerification(`http://127.0.0.1:${REVIEW_PORT}`);
+    } else {
+      console.log('\n（@anthropic-ai/sdk が未インストールのため、Claude 添削のテスト [12] は省略しました。CI では npm install 後に実行されます）');
+    }
 
     console.log('\n=========================================');
     console.log('🎉 すべての自動検証をパスしました');
@@ -437,6 +615,7 @@ mockJev.listen(MOCK_PORT, '127.0.0.1', () => mockSupabase.listen(MOCK_SB_PORT, '
     mockJev.close();
     mockSupabase.close();
     fs.rmSync(dataDir, { recursive: true, force: true });
+    fs.rmSync(reviewDataDir, { recursive: true, force: true });
     process.exit(exitCode);
   }
 }));

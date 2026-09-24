@@ -1,0 +1,23 @@
+# PR と main への push ごとに自動テスト (npm test) を実行する
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Claude 添削のテスト（[12]）に @anthropic-ai/sdk が必要
+      - run: npm install --no-audit --no-fund
+      - run: npm test
