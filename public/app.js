@@ -903,7 +903,6 @@ async function loadItemList() {
       <div class="item-row">
         <span class="tag tag-cat">${escapeHtml(categoryName(i.category))}</span>
         <span class="item-title">${escapeHtml(i.title)}</span>
-        ${i.isSample ? '<span class="tag tag-type">サンプル</span>' : ''}
         <span class="item-meta">${i.type === 'sc_past_paper' ? '過去問' : escapeHtml(i.nextAction || '')}</span>
       </div>
     `).join('');
@@ -960,20 +959,6 @@ function initSettings() {
       showToast('JSONファイルを読み込めませんでした', 'error');
     }
   });
-
-  document.getElementById('btnAddSamples').addEventListener('click', () => seedAction('add_samples'));
-  document.getElementById('btnResetSamples').addEventListener('click', () => {
-    if (confirm('サンプルデータを削除しますか？（あなたが登録したデータは残ります）')) {
-      seedAction('clear_samples');
-    }
-  });
-}
-
-async function seedAction(action) {
-  const data = await api('/api/seed', { body: { action } });
-  showToast(data.message || data.error || '完了しました', data.success ? 'success' : 'error');
-  loadRecommendedQuest();
-  updateReviewBadge();
 }
 
 async function saveAndTestKey() {
