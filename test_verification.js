@@ -253,7 +253,8 @@ async function runVerification() {
   await post('/api/quiz/answers', { answers: netCards.map((c, i) => ({ id: c.id, correct: i === 0 })), title: '弱点テスト' });
   const { data: content4 } = await get('/api/content');
   const net = content4.quiz.fields.find(f => f.id === 'network');
-  assert.strictEqual(net.attempts, 6);
+  // [5-b] でランダムに解いた問題にネットワーク分野が含まれることがあるので、6回以上とする
+  assert.ok(net.attempts >= 6 && net.attempts <= 11, `ネットワーク分野の解答数: ${net.attempts}`);
   assert.strictEqual(net.weak, true, '正答率 1/6 のネットワークは弱点');
   const { data: weakDeck } = await get('/api/quiz/deck?mode=weak&count=10');
   assert.strictEqual(weakDeck.cards.length, 10);
