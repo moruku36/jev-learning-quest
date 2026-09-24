@@ -98,6 +98,20 @@ async function runVerification() {
   assert.strictEqual(status.keySource, 'none');
   console.log('✔ JEV_API_KEY 未設定でも起動し、ルール動作と認識される');
 
+  console.log('\n=== [1-b] 以前のサンプルデータは表示しない ===');
+  const { data: emptyItems } = await get('/api/registered-items');
+  assert.deepStrictEqual(emptyItems.items, [], '初回は空のデータで始まる');
+  fs.writeFileSync(path.join(dataDir, 'store.json'), JSON.stringify({
+    items: [{ id: 'sample_sc_01', type: 'sc_past_paper', category: 'sc', title: '【サンプル】古いサンプル', isSample: true }],
+    history: [{ id: 'sample_hist_01', itemId: 'sample_sc_01', category: 'sc', title: '【サンプル】古い記録', isCorrect: false, isSample: true }]
+  }));
+  const { data: afterSamples } = await get('/api/registered-items');
+  assert.strictEqual(afterSamples.items.length, 0, '保存済みのサンプル素材は取り除かれる');
+  const { data: histAfterSamples } = await get('/api/history');
+  assert.strictEqual(histAfterSamples.history.length, 0, '保存済みのサンプル記録は取り除かれる');
+  assert.strictEqual((await post('/api/seed', { action: 'add_samples' })).status, 404, 'サンプル追加の API は廃止');
+  console.log('✔ 初回は空で始まり、以前のサンプルは自動で取り除かれる');
+
   console.log('\n=== [2] 学習素材の登録 ===');
   const regSC = await post('/api/registered-items', {
     type: 'sc_past_paper',
