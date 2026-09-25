@@ -721,11 +721,14 @@ async function loadReviewList() {
   container.innerHTML = '<p class="text-muted">読み込み中...</p>';
 
   try {
-    const [histData, itemData] = await Promise.all([api('/api/history'), api('/api/registered-items')]);
+    const [histData, itemData, contentData] = await Promise.all([
+      api('/api/history'), api('/api/registered-items'), api('/api/content').catch(() => null)
+    ]);
     const history = histData.history || [];
     const items = itemData.items || [];
     const pending = history.filter(isPendingReview);
     renderQuizReviewCard(histData.quizStats);
+    renderLearningLanes(contentData, items, history);
 
     if (pending.length === 0) {
       container.innerHTML = '<div class="empty-state">🎉 再挑戦待ちの問題はありません</div>';
@@ -796,6 +799,38 @@ async function loadReviewList() {
   } catch (err) {
     container.innerHTML = '<p class="text-muted">読み込みに失敗しました</p>';
   }
+}
+
+function renderLearningLanes(content, items, history) {
+  const host = document.getElementById('learningLanes');
+  if (!content?.quiz?.stats) {
+    host.innerHTML = '<p class="text-muted">進捗を読み込めませんでした。</p>';
+    return;
+  }
+  const ap = content.quiz.stats.ap;
+  const sc = content.quiz.stats.sc;
+  const written = content.written || [];
+  const attemptedWritten = written.filter(w => w.attempted).length;
+  const techItems = items.filter(i => i.type === 'catchup' && ['ai', 'cloud', 'security'].includes(i.category));
+  const completedTechItems = techItems.filter(i => history.some(h => h.itemId === i.id && h.isCorrect)).length;
+  const readings = content.readings || [];
+  const lanes = [
+    { name: '応用情報 午前 / 科目A-1', done: ap.studied, total: ap.total, detail: `定着 ${ap.mastered}問・復習待ち ${ap.due}問` },
+    { name: '支援士 午前II / 科目A-2', done: sc.studied, total: sc.total, detail: `定着 ${sc.mastered}問・復習待ち ${sc.due}問` },
+    { name: '支援士 記述 / 科目B', done: attemptedWritten, total: written.length, detail: '答案を書いて採点した問題' },
+    {
+      name: 'AI・クラウド・セキュリティ',
+      done: readings.filter(r => r.done).length + completedTechItems,
+      total: readings.length + techItems.length,
+      detail: '公式レポートと登録した記事'
+    }
+  ];
+  host.innerHTML = lanes.map(lane => `
+    <div class="learning-lane">
+      <div class="learning-lane-name">${lane.name}</div>
+      <div class="learning-lane-progress">${lane.done} / ${lane.total}</div>
+      <div class="learning-lane-detail">${lane.detail}</div>
+    </div>`).join('');
 }
 
 function renderHistoryList(history) {
@@ -1031,6 +1066,14 @@ function preferredQuizFormat() {
 
 function initQuiz() {
   document.getElementById('btnQuizReveal').addEventListener('click', revealQuizAnswer);
+  document.querySelectorAll('#quizConfidence .confidence-choice').forEach(btn => {
+    btn.addEventListener('click', () => setQuizConfidence(btn.getAttribute('data-confidence')));
+  });
+  document.getElementById('quizMistakeReason').addEventListener('change', e => {
+    const quiz = STATE.quiz;
+    if (!quiz || !quiz.answers.length) return;
+    quiz.answers[quiz.answers.length - 1].mistakeReason = e.target.value;
+  });
   document.getElementById('btnQuizRight').addEventListener('click', () => judgeQuizCard(true));
   document.getElementById('btnQuizWrong').addEventListener('click', () => judgeQuizCard(false));
   document.getElementById('btnQuizNext').addEventListener('click', goNextQuizCard);
@@ -1060,7 +1103,8 @@ function initQuiz() {
   document.addEventListener('keydown', e => {
     if (!STATE.quiz || document.getElementById('quizRunCard').hidden) return;
     const typing = e.target instanceof Element && e.target.closest('input, textarea, select');
-    if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+    const confidenceControl = e.target instanceof Element && e.target.closest('#quizConfidence button');
+    if (typing || confidenceControl || e.ctrlKey || e.metaKey || e.altKey) return;
     const card = STATE.quiz.cards[STATE.quiz.index];
     const revealed = !document.getElementById('quizAnswerBox').hidden;
     if (card && card.choices) {
@@ -1118,7 +1162,7 @@ async function startQuizRun(quest) {
 
   stopTimer();
   STATE.currentQuest = quest;
-  STATE.quiz = { quest, cards, index: 0, answers: [], startedAt: Date.now(), saving: false, format: quiz.format };
+  STATE.quiz = { quest, cards, index: 0, answers: [], startedAt: Date.now(), saving: false, format: quiz.format, confidence: null };
   setHidden('questHeroCard', true);
   setHidden('questRunCard', true);
   setHidden('completionBanner', true);
@@ -1131,6 +1175,7 @@ async function startQuizRun(quest) {
 function renderQuizCard() {
   const { cards, index, answers } = STATE.quiz;
   const card = cards[index];
+  STATE.quiz.confidence = null;
   document.getElementById('quizCounter').textContent = `${index + 1} / ${cards.length}`;
   document.getElementById('quizBarFill').style.width = `${(index / cards.length) * 100}%`;
   document.getElementById('quizSourceTag').textContent = card.sourceLabel;
@@ -1140,6 +1185,12 @@ function renderQuizCard() {
   document.getElementById('quizAnswerLabel').textContent = '💡 答え';
   document.getElementById('quizSourceLink').href = card.url;
   document.getElementById('quizReportNote').value = '';
+  document.getElementById('quizMistakeReason').value = '';
+  document.querySelectorAll('#quizConfidence .confidence-choice').forEach(btn => {
+    btn.disabled = false;
+    btn.setAttribute('aria-pressed', 'false');
+  });
+  setHidden('quizMistakeCheck', true);
   setHidden('quizReportForm', true);
   setHidden('quizAnswerBox', true);
   setHidden('quizJudge', true);
@@ -1169,6 +1220,29 @@ function revealQuizAnswer() {
   setHidden('btnQuizReveal', true);
 }
 
+function setQuizConfidence(value) {
+  if (!STATE.quiz || !['high', 'medium', 'low'].includes(value)
+    || STATE.quiz.answers.some(a => a.id === STATE.quiz.cards[STATE.quiz.index].id)) return;
+  STATE.quiz.confidence = value;
+  document.querySelectorAll('#quizConfidence .confidence-choice').forEach(btn => {
+    btn.setAttribute('aria-pressed', String(btn.getAttribute('data-confidence') === value));
+  });
+}
+
+function recordQuizAnswer(correct) {
+  const quiz = STATE.quiz;
+  const answer = {
+    id: quiz.cards[quiz.index].id,
+    correct,
+    confidence: quiz.confidence,
+    mistakeReason: ''
+  };
+  quiz.answers.push(answer);
+  document.querySelectorAll('#quizConfidence .confidence-choice').forEach(btn => { btn.disabled = true; });
+  setHidden('quizMistakeCheck', correct);
+  document.getElementById('quizMistakeReason').value = '';
+}
+
 // 4択: 選んだら自動で採点し、答えを見せて「次へ」を待つ
 function chooseQuizAnswer(idx) {
   const quiz = STATE.quiz;
@@ -1180,7 +1254,7 @@ function chooseQuizAnswer(idx) {
     if (card.choices[i] === card.answer) btn.classList.add('correct');
     else if (i === idx) btn.classList.add('wrong');
   });
-  quiz.answers.push({ id: card.id, correct });
+  recordQuizAnswer(correct);
   document.getElementById('quizAnswerLabel').textContent = correct ? '⭕ 正解！' : '❌ 不正解 — 正しい答え';
   setHidden('quizAnswerBox', false);
   setHidden('quizNext', false);
@@ -1198,7 +1272,7 @@ function goNextQuizCard() {
 function judgeQuizCard(correct) {
   const quiz = STATE.quiz;
   if (!quiz || quiz.saving) return;
-  quiz.answers.push({ id: quiz.cards[quiz.index].id, correct });
+  recordQuizAnswer(correct);
   goNextQuizCard();
 }
 
@@ -1279,7 +1353,12 @@ function renderQuizCompletion(data) {
   const ev = data.evaluation || {};
   document.getElementById('compTitle').textContent = data.summary;
   document.getElementById('compScoreTag').textContent = `理解度: ${SCORE_LABELS[ev.understandingScore] || '-'}`;
-  document.getElementById('compReviewTag').textContent = data.wrongCards.length ? `復習: ${data.wrongCards.length}問を明日` : '復習: 間隔をあけて再確認';
+  const lowConfidenceCorrect = data.history?.quizResult?.lowConfidenceCorrect || 0;
+  const reviewParts = [];
+  if (data.wrongCards.length) reviewParts.push(`誤答 ${data.wrongCards.length}問は明日`);
+  if (lowConfidenceCorrect) reviewParts.push(`自信なし正解 ${lowConfidenceCorrect}問は3日以内`);
+  document.getElementById('compReviewTag').textContent = reviewParts.length
+    ? `復習: ${reviewParts.join('・')}` : '復習: 間隔をあけて再確認';
   document.getElementById('compSourceTag').textContent = ev.decisionSource === 'jev' ? '判定: 🧠 Jev (Score / Noul)'
     : ev.decisionSource === 'offline' ? '判定: 📴 オンライン復帰後に保存' : '判定: 📋 ルール';
   const all = data.stats && data.stats.all;
@@ -1560,7 +1639,7 @@ function renderReadingList() {
       <div class="reading-main">
         <div class="reading-tags">
           <span class="tag tag-cat">${escapeHtml(r.org)}</span>
-          <span class="tag tag-type">${escapeHtml(r.kind)}・${r.year}</span>
+          <span class="tag tag-type">${escapeHtml(r.kind)}・${r.publishedAt ? `公開 ${r.publishedAt}` : r.year}</span>
           <span class="tag tag-time">⏱ ${r.minutes}分・${escapeHtml(r.level)}</span>
           ${r.done ? '<span class="tag tag-source jev">✔ 読了</span>' : ''}
         </div>
