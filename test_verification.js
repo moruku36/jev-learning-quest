@@ -236,7 +236,7 @@ async function runVerification() {
   console.log('✔ 間違えた問題は翌日以降に復習として優先して出題される');
 
   console.log('\n=== [5-c] AI レポート・論文 ===');
-  assert.strictEqual(content.readings.length, 36);
+  assert.strictEqual(content.readings.length, 40);
   assert.ok(content.readings.every(r => /^https:\/\//.test(r.url) && r.org && r.focus && r.task));
   const recAi = await post('/api/quest/recommend', { minutes: 20, category: 'ai', goal: 'input' });
   const readingCands = recAi.data.allCandidates.filter(c => c.type === 'レポートを読む');
