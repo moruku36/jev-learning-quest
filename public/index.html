@@ -149,7 +149,7 @@
               <p id="heroCriteria">-</p>
             </div>
           </div>
-          <p class="decision-note" id="heroDecisionNote"></p>
+          <div class="selection-note"><strong>このクエストを選んだ理由</strong><p class="decision-note" id="heroDecisionNote"></p></div>
 
           <div class="quest-card-footer">
             <button class="btn btn-secondary" id="btnChangeQuest">ほかの候補を見る</button>
@@ -249,11 +249,27 @@
               <span class="quiz-topic" id="quizTopic"></span>
             </div>
             <p class="quiz-question" id="quizQuestion">-</p>
+            <div class="quiz-confidence" id="quizConfidence" role="group" aria-label="答える前の自信度">
+              <span class="confidence-label">答える前の自信度</span>
+              <button class="btn btn-outline btn-sm confidence-choice" data-confidence="high" type="button" aria-pressed="false">自信あり</button>
+              <button class="btn btn-outline btn-sm confidence-choice" data-confidence="medium" type="button" aria-pressed="false">少し迷う</button>
+              <button class="btn btn-outline btn-sm confidence-choice" data-confidence="low" type="button" aria-pressed="false">自信なし</button>
+            </div>
             <button class="btn btn-secondary btn-lg quiz-reveal" id="btnQuizReveal" type="button">答えを見る <kbd>Space</kbd></button>
             <div class="quiz-choices" id="quizChoices" hidden></div>
             <div class="quiz-answer" id="quizAnswerBox" hidden>
               <span class="box-label" id="quizAnswerLabel">💡 答え</span>
               <p class="quiz-answer-text" id="quizAnswer"></p>
+              <div class="quiz-mistake-check" id="quizMistakeCheck" hidden>
+                <label class="input-label" for="quizMistakeReason">間違えた理由（任意）</label>
+                <select id="quizMistakeReason" class="simple-input">
+                  <option value="">選択してください</option>
+                  <option value="読み落とし">読み落とし</option>
+                  <option value="知識不足">知識不足</option>
+                  <option value="設問要求とのずれ">設問要求とのずれ</option>
+                  <option value="時間不足">時間不足</option>
+                </select>
+              </div>
               <div class="quiz-answer-links">
                 <a class="run-link" id="quizSourceLink" href="#" target="_blank" rel="noopener noreferrer">元の過去問と解説を見る ↗</a>
                 <button class="link-btn" id="btnQuizReport" type="button">⚠ この問題おかしい？</button>
@@ -378,6 +394,19 @@
           <button class="btn btn-primary" id="btnLibStartQuiz" type="button">▶ 一問一答を始める</button>
         </div>
 
+        <div class="card exam-snapshot">
+          <div class="card-title-row">
+            <h3 class="card-heading">🗓️ 2026年度の試験準備</h3>
+            <span class="count-label">IPA確認: 2026-09-26</span>
+          </div>
+          <p class="text-desc">情報処理安全確保支援士試験は2026年度からCBT方式です。前期の申込期間は10月6日10:00〜24日17:00、科目A-1・A-2は10月17日〜27日、科目Bは11月11日〜23日です。日時・会場は申込時に選びます。現時点で公開済みの過去問は令和7年度までです。2026年度の試験はこれから実施されるため、過去問演習に加えてCBTの予約や受験方法も公式案内で確認してください。</p>
+          <p class="text-desc">2027年度の新試験制度に向けたサンプル問題も公開されています。過去問演習と区別して、出題形式・範囲の差を確認しましょう。</p>
+          <div class="exam-snapshot-links">
+            <a class="run-link" href="https://www.ipa.go.jp/shiken/mousikomi/moushikomi.html" target="_blank" rel="noopener noreferrer">IPA: 申込期間・CBT実施期間 ↗</a>
+            <a class="run-link" href="https://www.ipa.go.jp/shiken/syllabus/henkou/2026/20260622.html" target="_blank" rel="noopener noreferrer">IPA: 新試験制度のサンプル問題 ↗</a>
+          </div>
+        </div>
+
         <div class="card">
           <div class="card-title-row">
             <h3 class="card-heading">📊 分野別の正答率</h3>
@@ -442,6 +471,12 @@
         <div class="panel-header">
           <h2>復習・再挑戦</h2>
           <p class="panel-sub">できなかった問題を、解説を見ずにもう一度解きます。正解すると「克服済み」になりリストから消えます。</p>
+        </div>
+
+        <div class="card">
+          <h3 class="card-heading">📈 学習の進み具合</h3>
+          <p class="text-desc">試験対策と技術キャッチアップを分けて表示します。</p>
+          <div class="learning-lanes" id="learningLanes"><p class="text-muted">読み込み中...</p></div>
         </div>
 
         <div class="card quiz-review-card" id="quizReviewCard" hidden>
