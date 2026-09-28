@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node test_verification.js"
+    "test": "node test_verification.js",
+    "update-readings": "node scripts/update-readings.js"
   },
   "keywords": [
     "jev",

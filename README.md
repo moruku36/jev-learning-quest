@@ -222,7 +222,7 @@ npm start
   - **支援士 午後・科目B（記述式）**: 令和3年春期〜令和7年秋期の45問。問題冊子と解答例は IPA 公式サイトの PDF へリンクするので、登録なしで演習できます
     - **キーワード照合**: 解答例のキーワードを入れると、答案に含まれているかを照合します（全角・半角の違いは吸収）。自分で登録する過去問にも採点キーワードを設定できます
     - **Claude による添削**: `ANTHROPIC_API_KEY` を設定すると、完了画面の「Claude に添削してもらう」で、総合評価・良い点・改善点・書き方の例を返します（モデルは `claude-opus-5`。安全性の理由で断られた場合はサーバー側で推奨モデルに切り替えて再実行）
-  - **AI 大手のレポート・論文**: Anthropic・OpenAI・Google・Meta・Microsoft などが公開しているレポートや論文。それぞれ「読むときの観点」と「書くアウトプット」付きで、「できた」で保存すると読了になり、次の未読がクエスト候補に上がります。2026-09-26時点の最新項目にはMentalHealthBench、AI悪用脅威レポート、GPT-6 Astra System Card、Hugging Faceインシデント報告を含みます
+  - **AI・クラウド・セキュリティのレポート・論文**: 大手各社（Anthropic・OpenAI・Google・Microsoft・AWS・Meta 等）や arXiv が公開している最新レポート・論文・技術解説。GitHub Actions で週次で自動更新され、古い教材は順次ローテーションされます。それぞれ「読むときの観点」と「書くアウトプット」付きで、「できた」で保存すると読了になり、次の未読がクエスト候補に上がります
   - **2026年度の試験準備**: 2026-09-26時点のIPA公式情報に基づき、支援士試験のCBT申込期間・実施期間と、2027年度の新試験制度サンプル問題を案内します
   - **AI の新着**: OpenAI・Google DeepMind・Google Research・Google AI・Microsoft Security の公式ブログと、arXiv の「LLM × セキュリティ」の新着を自動で取得します（サーバーで6時間キャッシュ）。「素材に追加」でキャッチアップ素材になります（Anthropic は公式の RSS がないため対象外）
 - **スマホ・オフライン**: ホーム画面に追加してアプリのように使えます（PWA）。オンラインのときに一問一答を最大60問端末に保存しておき、電波がないときはそれを解けます。結果は次にオンラインになったとき自動で保存されます
@@ -280,7 +280,8 @@ Jev は文章を生成せず、次の **判断だけ** を行います。
 │   ├── supabase.js        # 認証・許可リスト・Postgres 保存
 │   └── initial-data.js    # 学習データの初期状態（空）と、旧バージョンのサンプルの除去
 ├── public/                # 画面（Vercel では CDN から配信）。sw.js / manifest.webmanifest / icon-*.png は PWA 用
-├── .github/workflows/     # PR ごとに npm test を実行する GitHub Actions
+├── scripts/               # 教材の自動更新・ローテーションスクリプト (update-readings.js)
+├── .github/workflows/     # 自動テスト (test.yml) と週次教材更新 (update-content.yml)
 ├── supabase/schema.sql    # テーブル・RLS ポリシー
 ├── server.js              # ローカル実行用
 ├── vercel.json            # ルーティングとセキュリティヘッダー
