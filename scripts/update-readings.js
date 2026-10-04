@@ -6,10 +6,12 @@ const fs = require('fs');
 const path = require('path');
 const { parseFeed } = require('../lib/feeds');
 const { AI_READINGS: existingReadings } = require('../lib/content/ai-readings');
+const { planRotation, describeShortfall, isEventListing } = require('../lib/content/reading-rotation');
+const { CONFERENCE_READINGS } = require('../lib/content/conference-readings');
 
 const TARGET_FILE = path.join(__dirname, '..', 'lib', 'content', 'ai-readings.js');
 const TARGET_COUNT = 36; // 常に最新36件を維持
-const MAX_NEW_ITEMS = 4; // 1回の更新で取り込む最大新規件数
+const MAX_NEW_ITEMS = 8; // 1回の更新で取り込む最大新規件数
 const FETCH_TIMEOUT_MS = 10000;
 
 // AI・クラウド・セキュリティの公式情報源
@@ -137,9 +139,9 @@ async function main() {
 
   const existingUrls = new Set(existingReadings.map(r => r.url.toLowerCase()));
   const existingTitles = new Set(existingReadings.map(r => r.title.toLowerCase().trim()));
-  const existingIds = new Set(existingReadings.map(r => r.id));
 
   const candidateItems = [];
+  const sourceFailures = [];
 
   for (const source of SOURCES) {
     try {
@@ -158,6 +160,7 @@ async function main() {
 
         // マーケティング・無関係な記事を除外
         if (EXCLUDE_REGEX.test(item.title) || EXCLUDE_REGEX.test(item.summary || '')) continue;
+        if (isEventListing(`${item.title} ${item.summary || ''}`)) continue;
 
         const text = `${item.title} ${item.summary || ''}`;
         const hasKeyword = SECURITY_REGEX.test(text) || CLOUD_REGEX.test(text) || AI_REGEX.test(text);
@@ -168,17 +171,16 @@ async function main() {
           continue;
         }
 
-        const pubDate = item.publishedAt ? new Date(item.publishedAt) : new Date();
-        const year = Number.isNaN(pubDate.getTime()) ? new Date().getFullYear() : pubDate.getFullYear();
+        // Missing or future publication dates are not trustworthy weekly candidates.
+        const pubDate = item.publishedAt ? new Date(item.publishedAt) : null;
+        if (!pubDate || Number.isNaN(pubDate.getTime()) || pubDate.getTime() > Date.now()) continue;
+        const year = pubDate.getFullYear();
         const kind = determineKind(item.title, item.summary, source.org);
         const level = determineLevel(kind, item.title, item.summary);
         const { focus, task } = generateFocusAndTask(item.title, item.summary, kind, source.org);
         const score = scoreRelevance(item, source);
 
-        let id = `${slugify(source.org)}-${slugify(item.title)}`;
-        if (existingIds.has(id)) {
-          id = `${id}-${Math.floor(Math.random() * 1000)}`;
-        }
+        const id = `${slugify(source.org)}-${slugify(item.title)}`;
 
         candidateItems.push({
           id,
@@ -192,76 +194,51 @@ async function main() {
           focus,
           task,
           score,
-          publishedAt: item.publishedAt || new Date().toISOString()
+          publishedAt: pubDate.toISOString()
         });
       }
     } catch (err) {
       console.warn(`  [WARN] Failed to fetch ${source.name}: ${err.message}`);
+      sourceFailures.push(source.name);
     }
   }
 
   // スコア順かつ公開日順に並べ替え（最もAI/クラウド/セキュリティとして価値の高い最新記事を上位に）
+  // Add only curated conference material with a readable first-party abstract or paper.
+  // Conference programs and event dates alone are not learning materials.
+  candidateItems.push(...CONFERENCE_READINGS.map(item => ({ ...item, score: 70 })));
+
   candidateItems.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
-    return b.publishedAt.localeCompare(a.publishedAt);
+    return (b.publishedAt || b.eventEndDate || '').localeCompare(a.publishedAt || a.eventEndDate || '');
   });
 
   console.log(`[INFO] Found ${candidateItems.length} candidate articles.`);
-  const selectedNew = candidateItems.slice(0, MAX_NEW_ITEMS);
-
+  const rotation = planRotation(existingReadings, candidateItems, {
+    targetCount: TARGET_COUNT,
+    maxNewItems: MAX_NEW_ITEMS,
+    maxPerEvidenceType: 3
+  });
+  const { added: selectedNew, removed, retained } = rotation;
+  const finalList = rotation.finalList.map(({ score, ...item }) => item);
+  console.log(`[INFO] Rotation: ${selectedNew.length} added, ${removed.length} removed, ${retained.length} retained.`);
+  selectedNew.forEach(item => {
+    const sourceDate = item.publishedAt || `${item.eventStartDate}–${item.eventEndDate}`;
+    console.log(`  + [${item.id}] [${item.org}] [${item.kind}] ${sourceDate} ${item.title} — ${item.url}`);
+  });
+  if (removed.length > 0) {
+    console.log(`[INFO] Removed ${removed.length} oldest items (never more than the number added):`);
+    removed.forEach(item => console.log(`  - [${item.id}] [${item.org}] (${item.year}) ${item.title}`));
+  }
+  console.log(`[INFO] Updated list length: ${finalList.length}`);
+  if (rotation.shortfall > 0) {
+    const reason = describeShortfall(rotation, sourceFailures.length, SOURCES.length);
+    console.warn(`[WARN] Replacement shortfall: ${rotation.shortfall} item(s); ${reason}. Old items were retained.`);
+  }
   if (selectedNew.length === 0) {
-    console.log('[INFO] No new items to add today. Keeping current list.');
+    console.log('[INFO] No eligible items to add; keeping the current catalog unchanged.');
     return;
   }
-
-  console.log(`[INFO] Selected ${selectedNew.length} new items to add:`);
-  selectedNew.forEach(item => {
-    console.log(`  + [${item.org}] (score: ${item.score}, ${item.year}) ${item.title}`);
-  });
-
-  // 新規アイテムから作業用プロパティを除去
-  const cleanNewItems = selectedNew.map(({ publishedAt, score, ...rest }) => rest);
-
-  // 古い内容を順次削除するロジック：
-  // 既存リストのうち、発行年（year）が最も古いものを優先的に削除対象とする。
-  // 同じ年であれば、リストの末尾側にあるものを優先して削除。
-  let workingList = [...existingReadings];
-  const itemsToRemoveCount = (workingList.length + cleanNewItems.length) - TARGET_COUNT;
-  const removed = [];
-
-  if (itemsToRemoveCount > 0) {
-    // 削除候補を特定するため、(year 昇順, 元のインデックス 降順) でソートした順序でインデックスを決定
-    const indexed = workingList.map((item, originalIndex) => ({ item, originalIndex }));
-    indexed.sort((a, b) => {
-      if (a.item.year !== b.item.year) {
-        return a.item.year - b.item.year; // 年が古いものが先（削除優先）
-      }
-      return b.originalIndex - a.originalIndex; // 同じ年なら末尾に近いものが先
-    });
-
-    const removeOriginalIndices = new Set(indexed.slice(0, itemsToRemoveCount).map(x => x.originalIndex));
-    
-    const keptList = [];
-    workingList.forEach((item, idx) => {
-      if (removeOriginalIndices.has(idx)) {
-        removed.push(item);
-      } else {
-        keptList.push(item);
-      }
-    });
-    workingList = keptList;
-  }
-
-  // 最新の新着アイテムを先頭に追加
-  const finalList = [...cleanNewItems, ...workingList];
-
-  if (removed.length > 0) {
-    console.log(`[INFO] Pruned ${removed.length} oldest items to keep total at ${TARGET_COUNT}:`);
-    removed.forEach(item => console.log(`  - [${item.org}] (${item.year}) ${item.title}`));
-  }
-
-  console.log(`[INFO] Updated list length: ${finalList.length}`);
-
   const fileContent = `// AI・クラウド・セキュリティ 大手各社の最新レポート・論文・技術ブログ読書リスト
 // GitHub Actions (update-content.yml) により週次で自動更新・ローテーションされます。
 // URL はすべて公開ページ（arXiv / 各社公式サイト）。並び順がクエストで提案される優先順になる。

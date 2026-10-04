@@ -29,4 +29,4 @@ Choose available time and mood, receive one quest, answer and self-assess, then 
 
 ## Detailed documentation
 
-The [Japanese guide](README.ja.md) retains the complete original setup instructions, configuration, examples, project status, and limitations. Supporting documents keep their existing language.
+The [Japanese guide](README.ja.md) retains the complete original setup instructions, configuration, examples, project status, and limitations. See the [weekly reading refresh notes](docs/weekly-reading-updates.md) for Japanese and English details on source quality, replacement counts, and failure handling.
