@@ -21,3 +21,29 @@ jobs:
       # Claude 添削のテスト（[12]）に @anthropic-ai/sdk が必要
       - run: npm install --no-audit --no-fund
       - run: npm test
+      - name: Observe live reading sources (read-only, informational)
+        continue-on-error: true
+        timeout-minutes: 4
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const os = require('node:os');
+          const path = require('node:path');
+          const assert = require('node:assert/strict');
+          const { main, TARGET_FILE, WEEK_STATE_FILE } = require('./scripts/update-readings');
+          const snapshot = file => fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
+          const catalogBefore = snapshot(TARGET_FILE);
+          const stateBefore = snapshot(WEEK_STATE_FILE);
+          const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'reading-live-observation-'));
+          const observationState = path.join(tempDir, 'unused-week-state.json');
+          (async () => {
+            try {
+              await main({ dryRun: true, weekStateFile: observationState });
+            } finally {
+              assert.equal(snapshot(TARGET_FILE), catalogBefore, 'Live observation changed the catalog');
+              assert.equal(snapshot(WEEK_STATE_FILE), stateBefore, 'Live observation changed production week state');
+              assert.equal(fs.existsSync(observationState), false, 'Dry run wrote observation state');
+              fs.rmSync(tempDir, { recursive: true, force: true });
+            }
+          })().catch(error => { console.error(error); process.exitCode = 1; });
+          NODE
