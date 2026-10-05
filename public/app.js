@@ -1349,6 +1349,7 @@ async function finishQuiz() {
 }
 
 function renderQuizCompletion(data) {
+  document.getElementById('btnCompNext').textContent = '次のクエストへ';
   setHidden('completionBanner', false);
   const ev = data.evaluation || {};
   document.getElementById('compTitle').textContent = data.summary;
