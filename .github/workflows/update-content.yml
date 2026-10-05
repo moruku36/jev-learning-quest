@@ -3,9 +3,13 @@ name: update-content
 
 on:
   schedule:
-    # 毎週月曜 0:00 UTC (日本時間 9:00)
-    - cron: '0 0 * * 1'
+    # 毎週月曜 00:17 UTC (日本時間 09:17)
+    - cron: '17 0 * * 1'
   workflow_dispatch:
+
+concurrency:
+  group: weekly-reading-update
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -30,6 +34,7 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Update AI / Cloud / Security readings
+        id: update
         run: node scripts/update-readings.js
 
       - name: Run verification tests
@@ -40,6 +45,9 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add lib/content/ai-readings.js
+          if [ -f .github/state/weekly-content-update.json ]; then
+            git add .github/state/weekly-content-update.json
+          fi
           if git diff --staged --quiet; then
             echo "No content changes to commit."
           else

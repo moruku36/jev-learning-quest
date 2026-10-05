@@ -1,0 +1,26 @@
+{
+  "updatedWeek": "2026-10-05",
+  "status": "partial",
+  "updatedAt": "2026-10-05T03:33:47Z",
+  "additions": 8,
+  "removals": 8,
+  "sourceFailures": [
+    "arXiv (LLM Security)",
+    "arXiv (Cloud Security)"
+  ],
+  "timeZone": "Asia/Tokyo",
+  "migration": {
+    "reason": "Record the already-published legacy weekly update to prevent a second rotation in this JST week; this is not a success claim under the new selection rules.",
+    "commit": "9aea4013208106c65a5e0b0f5065bf2216761168",
+    "runUrl": "https://github.com/moruku36/jev-learning-quest/actions/runs/37259902078",
+    "catalogCount": 36,
+    "sourceFailureDetails": {
+      "arXiv (LLM Security)": "HTTP 429",
+      "arXiv (Cloud Security)": "Request timeout (operation aborted)"
+    },
+    "notCollected": [
+      "Anthropic Newsroom",
+      "Hacker News community metrics"
+    ]
+  }
+}
