@@ -65,9 +65,12 @@ const { generateQuestCandidates } = require('./lib/quest-engine');
       assert.equal(retry.url,question.questionPdf);
       assert.equal(retry.answerUrl,question.answerPdf);
       assert(retry.questionText.includes(`問${question.no}`));
+      await request('/api/history',{itemId:question.itemId,retryOf:saved.history.id,category:'nw',
+        title:question.title,userAnswer:'まだ誤答の再挑戦',isCorrect:false});
       const fixed=await request('/api/history',{itemId:question.itemId,retryOf:saved.history.id,category:'nw',
         title:question.title,userAnswer:'再挑戦の答案',isCorrect:true});
       assert.equal(fixed.resolvedHistoryId,saved.history.id);
+      assert((await storage.load()).history.filter(h=>h.itemId===question.itemId&&!h.isCorrect).every(h=>h.resolved));
     }
     const final=await storage.load();
     assert.deepEqual(final.items,seed.items);
