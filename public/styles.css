@@ -2193,3 +2193,5 @@ kbd {
 
 .nw-history { padding: 8px 16px; border-bottom: 1px solid var(--border); }
 .nw-history pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.run-eval-section:has(.eval-row[hidden]):has(.mistake-drawer[hidden]) { display:none; }

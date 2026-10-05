@@ -514,7 +514,7 @@ function initRunMode() {
   document.getElementById('btnTimerPlayPause').addEventListener('click', toggleTimer);
 
   document.getElementById('btnCancelRun').addEventListener('click', () => {
-    const hasInput = document.getElementById('inputAnswer').value.trim() !== '';
+    const hasInput = document.getElementById('inputAnswer').value.trim() !== '' || (STATE.currentQuest?.category==='nw' && (STATE.nwChoice || [...document.querySelectorAll('[data-nw-answer]')].some(i=>i.value.trim())));
     if (hasInput && !confirm('入力した答案は保存されません。中断しますか？')) return;
     stopTimer();
     setHidden('questRunCard', true);

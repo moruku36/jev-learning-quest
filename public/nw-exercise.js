@@ -48,7 +48,7 @@ async function mountNetworkExercise(quest) {
       STATE.nwGraded=true;setEvalState(STATE.nwChoice===q.correctChoice);grade.disabled=true;
       for(const b of choices.children)b.disabled=true;
       result.textContent=`${STATE.isCorrect?'正解':'不正解'} · 公式正解: ${q.correctChoice}`;
-      const a=document.createElement('a');a.href=`${q.answerPdf}#page=1`;a.target='_blank';a.rel='noopener';a.textContent=' 公式正解表を確認 ↗';result.append(a);
+      const a=document.createElement('a');a.className='run-link';a.href=`${q.answerPdf}#page=1`;a.target='_blank';a.rel='noopener';a.textContent=' 公式正解表を確認 ↗';result.append(a);
     };
     host.append(choices,grade,result);
   }else{
@@ -69,6 +69,7 @@ async function mountNetworkExercise(quest) {
         const details=document.createElement('details');const summary=document.createElement('summary');summary.textContent='公式解答例・要点';const text=document.createElement('pre');text.textContent=sub.answer;details.append(summary,text);
         const score=document.createElement('select');score.className='simple-input';score.dataset.nwScore=sub.id;score.setAttribute('aria-label',`${label}の自己採点`);
         for(const [value,text]of [['','自己採点を選ぶ'],['true','できた'],['false','できなかった']]){const option=document.createElement('option');option.value=value;option.textContent=text;score.append(option);}
+        score.onchange=()=>setEvalState([...host.querySelectorAll('[data-nw-score]')].every(s=>s.value!=='false'));
         group.append(field,details,score);
       }
       host.append(group);
