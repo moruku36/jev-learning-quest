@@ -30,3 +30,7 @@ Choose available time and mood, receive one quest, answer and self-assess, then 
 ## Detailed documentation
 
 The [Japanese guide](README.ja.md) retains the complete original setup instructions, configuration, examples, project status, and limitations. See the [weekly reading refresh notes](docs/weekly-reading-updates.md) for Japanese and English details on source quality, replacement counts, and failure handling.
+
+## Network Specialist past exams
+
+The 2021–2025 spring catalog includes 275 automatically marked morning questions and 25 complete afternoon questions with per-subquestion answers and self-assessment. Original IPA text/choices/diagrams are displayed as attributed scans. Existing materials, history and reading CI are preserved. See [implementation and sources](docs/network-exam-learning.md) and [content QA](docs/nw-content-qa.md).

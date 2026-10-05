@@ -182,6 +182,7 @@
             <div class="box-content" id="runPrompt">-</div>
             <a class="run-link" id="runLink" href="#" target="_blank" rel="noopener noreferrer" hidden>原文を開く ↗</a>
           </div>
+          <div id="nwExercise" hidden></div>
 
           <div class="run-input-group">
             <label for="inputAnswer" class="input-label">あなたの答案 / メモ <span class="req">*</span></label>
@@ -364,14 +365,14 @@
 
         <div class="card nw-card">
           <div class="card-title-row"><h3 class="card-heading">ネットワークスペシャリスト 過去5年</h3><span class="count-label" id="nwCount"></span></div>
-          <p class="text-desc">2021〜2025年春期の午前Ⅰ・午前Ⅱ・午後Ⅰ・午後Ⅱ、全300問題単位。問題本文・図表はIPA公式PDFを別タブで読み、ここで答案・自己採点・復習を保存します。午後は大問内の全設問を解きます。</p>
-          <p class="field-hint">本文のアプリ内表示・午前の自動採点には未対応です。自己採点は公式得点ではありません。2026年の実問題は含みません。</p>
+          <p class="text-desc">2021〜2025年春期の午前Ⅰ・午前Ⅱ・午後Ⅰ・午後Ⅱ、全300問題単位。問題本文・選択肢・図表を画面内のIPA原本画像で読みます。午前275問は選択回答を自動採点、午後25問は設問ごとの答案・自己採点・復習を保存します。午後は大問内の全設問を解きます。</p>
+          <p class="field-hint">午後の自己採点は公式得点ではありません。2026年の実問題は含みません。</p>
           <div class="learning-lanes" id="nwProgress"></div>
           <div class="form-row-2col">
             <div><label class="input-label" for="nwYear">年度</label><select id="nwYear" class="simple-input"><option value="2025">2025年 / 令和7年 春期</option><option value="2024">2024年 / 令和6年 春期</option><option value="2023">2023年 / 令和5年 春期</option><option value="2022">2022年 / 令和4年 春期</option><option value="2021">2021年 / 令和3年 春期</option></select></div>
             <div><label class="input-label" for="nwPart">時間区分</label><select id="nwPart" class="simple-input"><option value="am2">午前Ⅱ（専門・25問）</option><option value="am1">午前Ⅰ（共通・30問）</option><option value="pm1">午後Ⅰ（3大問）</option><option value="pm2">午後Ⅱ（2大問）</option></select></div>
           </div>
-          <div class="pill-group reading-filter" id="nwFilterPills"><button class="pill active" data-val="all">すべて</button><button class="pill" data-val="todo">未着手</button><button class="pill" data-val="review">要復習</button><button class="pill" data-val="done">自己採点でできた</button></div>
+          <div class="pill-group reading-filter" id="nwFilterPills"><button class="pill active" data-val="all">すべて</button><button class="pill" data-val="todo">未着手</button><button class="pill" data-val="review">要復習</button><button class="pill" data-val="done">できた</button></div>
           <div class="reading-list" id="nwList"></div>
           <a class="run-link" href="https://www.nw-siken.com/nwkakomon.php" target="_blank" rel="noopener noreferrer">参考: ネットワークスペシャリスト試験ドットコム ↗</a>
         </div>
@@ -611,6 +612,7 @@
   <!-- 通知 -->
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
+  <script src="nw-exercise.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

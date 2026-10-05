@@ -486,7 +486,7 @@ function startQuestRun(quest) {
   }
 
   // 記述式（過去問）はキーワード照合・設問の貼り付け欄を出す
-  const isWritten = quest.type === '過去問を解く' || (quest.type === '誤答を直す' && !quest.focus);
+  const isWritten = quest.category==='nw' || quest.type === '過去問を解く' || (quest.type === '誤答を直す' && !quest.focus);
   setHidden('writtenExtra', !isWritten);
   document.getElementById('inputKeywords').value = quest.keywords || '';
   document.getElementById('inputQuestionText').value = '';
@@ -505,6 +505,7 @@ function startQuestRun(quest) {
   }
 
   startTimer(minutes);
+  mountNetworkExercise(quest);
   document.getElementById('questRunCard').scrollIntoView({ behavior: 'smooth' });
   answer.focus({ preventScroll: true });
 }
@@ -594,11 +595,15 @@ function updateTimerText() {
 }
 
 async function handleCompleteQuest() {
+  let nwPayload=null;
+  if(STATE.currentQuest?.category==='nw'){
+    try{nwPayload=prepareNetworkSubmission();}catch(err){showToast(err.message,'warn');return;}
+  }
   if (STATE.currentQuest?.category === 'nw' && !STATE.nwGraded) {
     showToast('公式解答と照合して「できた／できなかった」を選んでから保存してください', 'warn');
     return;
   }
-  const ans = document.getElementById('inputAnswer').value.trim();
+  const ans = nwPayload?.userAnswer || document.getElementById('inputAnswer').value.trim();
   if (!ans) {
     showToast('答案またはメモを入力してください', 'error');
     document.getElementById('inputAnswer').focus();
@@ -626,7 +631,8 @@ async function handleCompleteQuest() {
     mistakeReason: STATE.isCorrect ? '' : STATE.mistakeReason,
     mistakeDetail: document.getElementById('inputMistakeDetail').value.trim(),
     keywords: document.getElementById('inputKeywords').value.trim(),
-    questionText: document.getElementById('inputQuestionText').value.trim() || quest.questionText || ''
+    questionText: document.getElementById('inputQuestionText').value.trim() || quest.questionText || '',
+    ...(nwPayload || {})
   };
 
   try {
@@ -650,7 +656,7 @@ function renderCompletion(data) {
   setHidden('completionBanner', false);
 
   const ev = data.evaluation || {};
-  const network = STATE.library?.network?.find(q=>q.itemId===STATE.currentQuest?.itemId);
+  const network = STATE.currentQuest?.category==='nw' ? (STATE.nwQuestion || STATE.library?.network?.find(q=>q.itemId===STATE.currentQuest?.itemId)) : null;
   if (network && data.history) {
     network.attempted=true;
     network.done=data.history.isCorrect===true;
@@ -662,6 +668,8 @@ function renderCompletion(data) {
   document.getElementById('compScoreTag').textContent = `理解度: ${SCORE_LABELS[ev.understandingScore] || ev.understandingScore}`;
   document.getElementById('compReviewTag').textContent = ev.needsReview ? '復習: 数日後にもう一度' : '復習: 不要';
   document.getElementById('compSourceTag').textContent = byJev ? '判定: 🧠 Jev (Score / Noul)' : '判定: 📋 ルール';
+
+  if(data.history?.nwScore){document.getElementById('compScoreTag').textContent=`採点: ${data.history.nwScore.correct} / ${data.history.nwScore.total}`;document.getElementById('compSourceTag').textContent=data.history.gradingMode==='official-key'?'判定: IPA公式正解':'判定: 設問別の自己採点';}
 
   let msg;
   if (data.resolvedHistoryId) {
@@ -692,18 +700,20 @@ function renderCompletion(data) {
 
   // 記述式は解答例へのリンクと Claude の添削
   const quest = STATE.currentQuest || {};
-  const isWritten = quest.type === '過去問を解く' || (quest.type === '誤答を直す' && !quest.focus);
+  const isWritten = quest.category==='nw' || quest.type === '過去問を解く' || (quest.type === '誤答を直す' && !quest.focus);
   STATE.lastHistoryId = data.history ? data.history.id : null;
   setHidden('compReviewBox', !isWritten);
   if (isWritten) {
     const link = document.getElementById('compAnswerLink');
     link.hidden = !quest.answerUrl;
     if (quest.answerUrl) link.href = quest.answerUrl;
+    setHidden('btnClaudeReview',quest.category==='nw');
     const configured = Boolean(STATE.jev.reviewConfigured);
     document.getElementById('btnClaudeReview').disabled = !configured;
     document.getElementById('claudeReviewHint').textContent = configured
       ? '答案と、入力した設問文・キーワードを Claude に送って、良い点・改善点・書き方の例を返してもらいます。'
       : '添削は管理者が環境変数 ANTHROPIC_API_KEY を設定すると使えるようになります。';
+    if(quest.category==='nw')document.getElementById('claudeReviewHint').textContent='公式正解・公式解答例を参照した採点結果と、設問別の答案は「復習」の履歴で確認できます。';
     setHidden('compReviewResult', true);
   }
 
@@ -714,11 +724,12 @@ function startNetworkQuestion(q, retryOf) {
   switchTab('quest');
   startQuestRun({
     type:'過去問を解く', category:'nw', title:`NW ${q.title}`, sourceRef:q.sourceLabel,
-    questionText:`${q.sourceLabel}\n\n公式問題冊子を別タブで開き、問${q.no}を解いてください。図表・選択肢・字数制限は原文で確認します。\n練習時間: ${q.minutes}分（本試験: ${q.note}）\n\n${q.kind==='choice'?'答案欄にア・イ・ウ・エと判断理由を書いてください。':'大問内の全設問を「設問1(1): …」の形で書いてください。'}\n解き終わったら公式解答を開いて自己採点し、「できた／できなかった」を選んで保存します。自己採点は公式得点ではありません。`,
+    networkQuestion:q,
+    questionText:`${q.sourceLabel}\n原本画像を読み、${q.kind==='choice'?'選択肢を選んで自動採点します。':'大問内の全設問に答えて、公式解答例で自己採点します。'}`,
     url:q.questionPdf, answerUrl:q.answerPdf, recommendedMinutes:q.minutes,
     itemId:q.itemId, historyId:retryOf || (q.attempted && !q.done ? q.historyId : null),
     reason:'公式過去問を解き、判断の根拠とつまずきを記録します。',
-    criteria:q.kind==='choice'?'選択肢と理由を書き、公式解答と自己採点すること。':'大問内の全設問に答え、公式解答例と自己採点すること。',
+    criteria:q.kind==='choice'?'選択肢を選び、公式正解による採点結果を保存すること。':'大問内の全設問に答え、公式解答例と自己採点すること。',
     decisionSource:'manual'
   });
 }
@@ -730,14 +741,14 @@ function renderNetworkList() {
   const names={am1:'午前Ⅰ',am2:'午前Ⅱ',pm1:'午後Ⅰ',pm2:'午後Ⅱ'};
   document.getElementById('nwProgress').innerHTML=Object.entries(names).map(([part,name])=>{
     const qs=all.filter(q=>q.part===part);
-    return `<div class="learning-lane"><div class="learning-lane-name">${name}</div><div class="learning-lane-progress">${qs.filter(q=>q.attempted).length} / ${qs.length}</div><div class="learning-lane-detail">自己採点でできた ${qs.filter(q=>q.done).length}問</div></div>`;
+    return `<div class="learning-lane"><div class="learning-lane-name">${name}</div><div class="learning-lane-progress">${qs.filter(q=>q.attempted).length} / ${qs.length}</div><div class="learning-lane-detail">できた ${qs.filter(q=>q.done).length}問</div></div>`;
   }).join('');
   const year=Number(document.getElementById('nwYear').value);
   const part=document.getElementById('nwPart').value;
   const filter=STATE.nwFilter || 'all';
   const qs=all.filter(q=>q.year===year&&q.part===part&&(filter==='all'||filter==='todo'&&!q.attempted||filter==='review'&&q.attempted&&!q.done||filter==='done'&&q.done));
   const list=document.getElementById('nwList');
-  list.innerHTML=qs.length ? qs.map(q=>`<div class="reading-row"><div class="reading-main"><div class="reading-tags"><span class="tag tag-cat">${escapeHtml(q.title)}</span><span class="tag tag-time">${q.minutes}分</span><span class="tag tag-source">${q.done?'自己採点でできた':q.attempted?'要復習':'未着手'}</span></div><p class="reading-focus">${escapeHtml(q.note)} ・ <a class="run-link" href="${escapeHtml(q.questionPdf)}" target="_blank" rel="noopener noreferrer">公式問題冊子 ↗</a></p></div><button class="btn btn-secondary btn-sm" data-nw="${escapeHtml(q.itemId)}" type="button">${q.attempted?'もう一度解く':'解く'}</button></div>`).join('') : '<p class="text-muted">この条件に該当する問題はありません。</p>';
+  list.innerHTML=qs.length ? qs.map(q=>`<div class="reading-row"><div class="reading-main"><div class="reading-tags"><span class="tag tag-cat">${escapeHtml(q.title)}</span><span class="tag tag-time">${q.minutes}分</span><span class="tag tag-source">${q.done?'できた':q.attempted?'要復習':'未着手'}</span></div><p class="reading-focus">${escapeHtml(q.note)} ・ <a class="run-link" href="${escapeHtml(q.questionPdf)}" target="_blank" rel="noopener noreferrer">公式問題冊子 ↗</a></p></div><button class="btn btn-secondary btn-sm" data-nw="${escapeHtml(q.itemId)}" type="button">${q.attempted?'もう一度解く':'解く'}</button></div>`).join('') : '<p class="text-muted">この条件に該当する問題はありません。</p>';
   list.querySelectorAll('[data-nw]').forEach(btn=>btn.addEventListener('click',()=>startNetworkQuestion(all.find(q=>q.itemId===btn.dataset.nw))));
 }
 
@@ -872,7 +883,7 @@ function renderLearningLanes(content, items, history) {
   const readings = content.readings || [];
   const network = content.network || [];
   const lanes = [
-    ...['am1','am2','pm1','pm2'].map(part=>{ const qs=network.filter(q=>q.part===part); return {name:`NW ${{am1:'午前Ⅰ',am2:'午前Ⅱ',pm1:'午後Ⅰ',pm2:'午後Ⅱ'}[part]}`,done:qs.filter(q=>q.attempted).length,total:qs.length,detail:`自己採点でできた ${qs.filter(q=>q.done).length}・要復習 ${qs.filter(q=>q.attempted&&!q.done).length}`}; }),
+    ...['am1','am2','pm1','pm2'].map(part=>{ const qs=network.filter(q=>q.part===part); return {name:`NW ${{am1:'午前Ⅰ',am2:'午前Ⅱ',pm1:'午後Ⅰ',pm2:'午後Ⅱ'}[part]}`,done:qs.filter(q=>q.attempted).length,total:qs.length,detail:`できた ${qs.filter(q=>q.done).length}・要復習 ${qs.filter(q=>q.attempted&&!q.done).length}`}; }),
     { name: '応用情報 午前 / 科目A-1', done: ap.studied, total: ap.total, detail: `定着 ${ap.mastered}問・復習待ち ${ap.due}問` },
     { name: '支援士 午前II / 科目A-2', done: sc.studied, total: sc.total, detail: `定着 ${sc.mastered}問・復習待ち ${sc.due}問` },
     { name: '支援士 記述 / 科目B', done: attemptedWritten, total: written.length, detail: '答案を書いて採点した問題' },
@@ -908,7 +919,8 @@ function renderHistoryList(history) {
         <span class="history-title">${escapeHtml(h.title)}</span>
         ${src}
         <span class="history-score">${escapeHtml(SCORE_LABELS[h.understandingScore] || '')}</span>
-      </div>`;
+      </div>
+      ${h.nwAnswers?`<details class="nw-history"><summary>${h.gradingMode==='official-key'?'公式正解で採点':'設問別の自己採点'} ${h.nwScore.correct} / ${h.nwScore.total}${h.nwScore.excluded?`（無効 ${h.nwScore.excluded}小問を除外）`:''} · 答案を見る</summary>${h.nwAnswers.map(a=>`<p>${escapeHtml(a.id==='choice'?'選択回答':`設問${a.id}`)} · ${a.isCorrect?'できた':'できなかった'}${a.correctChoice?` · 正解 ${escapeHtml(a.correctChoice)}`:''}</p><pre>${escapeHtml(a.answer)}</pre>`).join('')}</details>`:''}`;
   }).join('');
 }
 

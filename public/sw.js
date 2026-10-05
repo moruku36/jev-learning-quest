@@ -2,8 +2,8 @@
 //   - 画面（HTML / JS / CSS / アイコン）だけをキャッシュし、オフラインでも起動できるようにする
 //   - /api/* や外部サイトはキャッシュしない（学習データや認証情報を端末に残さない）
 //   - 画面はネットワーク優先で取り、つながらないときだけキャッシュを使う（更新がすぐ反映される）
-const CACHE = 'jlq-shell-v2';
-const SHELL = ['/', '/index.html', '/app.js', '/styles.css', '/manifest.webmanifest', '/icon.svg', '/icon-192.png', '/icon-512.png'];
+const CACHE = 'jlq-shell-v3';
+const SHELL = ['/', '/index.html', '/app.js', '/nw-exercise.js', '/styles.css', '/manifest.webmanifest', '/icon.svg', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));
