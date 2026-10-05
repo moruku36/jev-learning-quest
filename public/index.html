@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Jev 学習クエスト</title>
-  <meta name="description" content="判断AI Jev が「今日やる1つ」を選ぶ、支援士試験対策と技術キャッチアップのための学習アプリ">
+  <meta name="description" content="判断AI Jev が「今日やる1つ」を選ぶ、NW・支援士の試験対策と技術キャッチアップのための学習アプリ">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="manifest" href="manifest.webmanifest">
@@ -22,7 +22,7 @@
     <div class="auth-card">
       <span class="brand-logo auth-logo" aria-hidden="true">J</span>
       <h1 class="auth-title">Jev 学習クエスト</h1>
-      <p class="auth-sub">判断AI Jev が「今日やる1つ」を選ぶ、支援士対策 & 技術キャッチアップ</p>
+      <p class="auth-sub">判断AI Jev が「今日やる1つ」を選ぶ、NW・支援士の試験対策 & 技術キャッチアップ</p>
       <button class="btn btn-github btn-lg" id="btnLogin" type="button">
         <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
         GitHub でログイン
@@ -40,7 +40,7 @@
         <span class="brand-logo" aria-hidden="true">J</span>
         <div>
           <h1 class="brand-title">Jev 学習クエスト</h1>
-          <p class="brand-sub">判断AI Jev が「今日やる1つ」を選ぶ ─ 支援士対策 & 技術キャッチアップ</p>
+          <p class="brand-sub">判断AI Jev が「今日やる1つ」を選ぶ ─ NW・支援士の試験対策 & 技術キャッチアップ</p>
         </div>
       </div>
       <div class="header-actions">
@@ -57,13 +57,12 @@
     </header>
 
     <nav class="header-nav" aria-label="メインメニュー">
-      <button class="nav-tab active" data-tab="quest">🎯 今日のクエスト</button>
-      <button class="nav-tab" data-tab="library">📚 教材</button>
+      <button class="nav-tab active" data-tab="quest">🎯 学ぶ</button>
+      <button class="nav-tab" data-tab="library">📝 試験問題</button>
       <button class="nav-tab" data-tab="review">
         🔁 復習
         <span class="nav-badge" id="reviewCountBadge" hidden>0</span>
       </button>
-      <button class="nav-tab" data-tab="register">📝 素材を登録</button>
       <button class="nav-tab" data-tab="settings">⚙️ 設定</button>
     </nav>
 
@@ -103,14 +102,14 @@
               <button class="pill" data-val="10">10分</button>
               <button class="pill active" data-val="20">20分</button>
               <button class="pill" data-val="30">30分</button>
-              <button class="pill" data-val="60">60分</button>
+              <button class="pill" data-val="60">60分</button><button class="pill" data-val="120">120分</button>
             </div>
           </div>
           <div class="filter-group">
             <span class="filter-label">分野</span>
             <div class="pill-group" id="catPills">
               <button class="pill active" data-val="all">すべて</button>
-              <button class="pill" data-val="sc">支援士</button>
+              <button class="pill" data-val="nw">ネットワーク</button><button class="pill" data-val="sc">支援士</button>
               <button class="pill" data-val="ai">AI</button>
               <button class="pill" data-val="cloud">クラウド</button>
               <button class="pill" data-val="security">セキュリティ</button>
@@ -327,15 +326,55 @@
           </div>
           <button class="btn btn-primary" id="btnCompNext">次のクエストへ</button>
         </div>
+
+        <div class="panel-header"><h2>技術を学ぶ</h2><p class="panel-sub">公式レポートと新着情報でキャッチアップ。試験演習は「試験問題」から選べます。</p></div>
+        <div class="card">
+          <div class="card-title-row">
+            <h3 class="card-heading">🤖 AI 大手のレポート・論文を読む</h3>
+            <span class="count-label" id="readingCount"></span>
+          </div>
+          <p class="text-desc">Anthropic・OpenAI・Google・Meta・Microsoft などが公開している一次情報です。読む観点とアウトプットが決まっているので、読んだら要点を書いて保存します。「できた」で保存すると読了になります。</p>
+          <div class="pill-group reading-filter" id="readingFilterPills">
+            <button class="pill active" data-val="todo">未読</button>
+            <button class="pill" data-val="all">すべて</button>
+            <button class="pill" data-val="done">読了</button>
+          </div>
+          <div class="reading-list" id="readingList"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title-row">
+            <h3 class="card-heading">🆕 AI の新着（公式ブログ・arXiv）</h3>
+            <span class="count-label" id="feedUpdated"></span>
+          </div>
+          <p class="text-desc">OpenAI・Google DeepMind・Google Research・Microsoft Security の公式ブログと、arXiv の「LLM × セキュリティ」の新着です（数時間ごとに更新）。気になる記事を開き、要点を確認できます。</p>
+          <div class="reading-list" id="feedList"><p class="text-muted">「学ぶ」で読み込みます</p></div>
+        </div>
+
+        <div class="card"><h3 class="card-heading">保存済み教材 <span class="count-label" id="itemCount"></span></h3><p class="text-desc">これまでの教材も学習候補に残っています。</p><div class="item-list" id="itemList"></div></div>
       </section>
 
       <!-- ================= 1-b. 教材 ================= -->
       <section id="view-library" class="view-panel">
         <div class="panel-header">
-          <h2>教材</h2>
-          <p class="panel-sub">アプリに入っている教材です。ここから直接始めることも、「今日のクエスト」で Jev に選んでもらうこともできます。</p>
+          <h2>試験問題</h2>
+          <p class="panel-sub">年度と時間区分から選んで演習し、答案と復習を残します。</p>
         </div>
 
+
+        <div class="card nw-card">
+          <div class="card-title-row"><h3 class="card-heading">ネットワークスペシャリスト 過去5年</h3><span class="count-label" id="nwCount"></span></div>
+          <p class="text-desc">2021〜2025年春期の午前Ⅰ・午前Ⅱ・午後Ⅰ・午後Ⅱ、全300問題単位。問題本文・図表はIPA公式PDFを別タブで読み、ここで答案・自己採点・復習を保存します。午後は大問内の全設問を解きます。</p>
+          <p class="field-hint">本文のアプリ内表示・午前の自動採点には未対応です。自己採点は公式得点ではありません。2026年の実問題は含みません。</p>
+          <div class="learning-lanes" id="nwProgress"></div>
+          <div class="form-row-2col">
+            <div><label class="input-label" for="nwYear">年度</label><select id="nwYear" class="simple-input"><option value="2025">2025年 / 令和7年 春期</option><option value="2024">2024年 / 令和6年 春期</option><option value="2023">2023年 / 令和5年 春期</option><option value="2022">2022年 / 令和4年 春期</option><option value="2021">2021年 / 令和3年 春期</option></select></div>
+            <div><label class="input-label" for="nwPart">時間区分</label><select id="nwPart" class="simple-input"><option value="am2">午前Ⅱ（専門・25問）</option><option value="am1">午前Ⅰ（共通・30問）</option><option value="pm1">午後Ⅰ（3大問）</option><option value="pm2">午後Ⅱ（2大問）</option></select></div>
+          </div>
+          <div class="pill-group reading-filter" id="nwFilterPills"><button class="pill active" data-val="all">すべて</button><button class="pill" data-val="todo">未着手</button><button class="pill" data-val="review">要復習</button><button class="pill" data-val="done">自己採点でできた</button></div>
+          <div class="reading-list" id="nwList"></div>
+          <a class="run-link" href="https://www.nw-siken.com/nwkakomon.php" target="_blank" rel="noopener noreferrer">参考: ネットワークスペシャリスト試験ドットコム ↗</a>
+        </div>
         <div class="card">
           <h3 class="card-heading">📝 一問一答（過去問5年分）</h3>
           <p class="text-desc">
@@ -442,28 +481,6 @@
           <div class="reading-list" id="writtenList"></div>
         </div>
 
-        <div class="card">
-          <div class="card-title-row">
-            <h3 class="card-heading">🤖 AI 大手のレポート・論文を読む</h3>
-            <span class="count-label" id="readingCount"></span>
-          </div>
-          <p class="text-desc">Anthropic・OpenAI・Google・Meta・Microsoft などが公開している一次情報です。読む観点とアウトプットが決まっているので、読んだら要点を書いて保存します。「できた」で保存すると読了になります。</p>
-          <div class="pill-group reading-filter" id="readingFilterPills">
-            <button class="pill active" data-val="todo">未読</button>
-            <button class="pill" data-val="all">すべて</button>
-            <button class="pill" data-val="done">読了</button>
-          </div>
-          <div class="reading-list" id="readingList"></div>
-        </div>
-
-        <div class="card">
-          <div class="card-title-row">
-            <h3 class="card-heading">🆕 AI の新着（公式ブログ・arXiv）</h3>
-            <span class="count-label" id="feedUpdated"></span>
-          </div>
-          <p class="text-desc">OpenAI・Google DeepMind・Google Research・Microsoft Security の公式ブログと、arXiv の「LLM × セキュリティ」の新着です（数時間ごとに更新）。気になったものを「素材に追加」すると、今日のクエストの候補になります。</p>
-          <div class="reading-list" id="feedList"><p class="text-muted">教材タブを開くと読み込みます</p></div>
-        </div>
       </section>
 
       <!-- ================= 2. 復習 ================= -->
@@ -497,103 +514,6 @@
         <div class="card">
           <h3 class="card-heading">🗂 最近の学習記録</h3>
           <div class="history-list" id="historyList"></div>
-        </div>
-      </section>
-
-      <!-- ================= 3. 素材を登録 ================= -->
-      <section id="view-register" class="view-panel">
-        <div class="panel-header">
-          <h2>学習素材を登録</h2>
-          <p class="panel-sub">登録した素材の中から、Jev が毎日のクエストを選びます。</p>
-        </div>
-
-        <div class="card">
-          <div class="subtab-row" role="tablist">
-            <button class="subtab active" data-sub="sub-sc">支援士 過去問</button>
-            <button class="subtab" data-sub="sub-cu">AI / クラウド / セキュリティ記事</button>
-          </div>
-
-          <!-- 支援士 -->
-          <form id="formSimpleSC" class="simple-form active">
-            <p class="text-desc">支援士の午後/科目B（令和3年〜令和7年）は「教材」タブから登録なしで演習できます。それ以外の問題や、設問単位で繰り返したいものをここに登録してください。</p>
-            <div class="form-row">
-              <label class="input-label" for="inScTitle">問題名 / テーマ <span class="req">*</span></label>
-              <input type="text" id="inScTitle" class="simple-input" required placeholder="例: 令和5年秋期 科目B 問1 (Webセキュリティ)">
-            </div>
-            <div class="form-row-2col">
-              <div>
-                <label class="input-label" for="inScSource">出典 <span class="req">*</span></label>
-                <input type="text" id="inScSource" class="simple-input" required placeholder="例: IPA 過去問 令和5年秋期">
-              </div>
-              <div>
-                <label class="input-label" for="inScDate">実施日</label>
-                <input type="date" id="inScDate" class="simple-input">
-              </div>
-            </div>
-            <div class="form-row">
-              <label class="input-label" for="inScQuestion">設問文 <span class="req">*</span></label>
-              <textarea id="inScQuestion" class="simple-input" rows="3" required placeholder="例: 設問1: Cookie窃取を防ぐために設定すべき属性とその理由を40字以内で述べよ。"></textarea>
-            </div>
-            <div class="form-row">
-              <label class="input-label" for="inScNotes">解答ポイント（解き終わるまで表示されません）</label>
-              <input type="text" id="inScNotes" class="simple-input" placeholder="例: HttpOnly属性。XSSによるCookie読み取りを防ぐ。">
-            </div>
-            <div class="form-row">
-              <label class="input-label" for="inScKeywords">採点キーワード（任意・「、」区切り。答案に含まれるか自動で照合します）</label>
-              <input type="text" id="inScKeywords" class="simple-input" placeholder="例: HttpOnly、XSS、JavaScript">
-            </div>
-            <div class="form-row">
-              <label class="input-label" for="inScUrl">問題の URL（任意）</label>
-              <input type="url" id="inScUrl" class="simple-input" placeholder="https://www.ipa.go.jp/...">
-            </div>
-            <button type="submit" class="btn btn-primary">過去問を登録</button>
-          </form>
-
-          <!-- キャッチアップ -->
-          <form id="formSimpleCU" class="simple-form">
-            <p class="text-desc">「読んだ」で終わらせないために、<strong>次の行動</strong>を1つ決めて登録します。</p>
-            <div class="form-row">
-              <label class="input-label" for="inCuTitle">記事・発表タイトル <span class="req">*</span></label>
-              <input type="text" id="inCuTitle" class="simple-input" required placeholder="例: LLMアプリ向けガードレール設計ガイド">
-            </div>
-            <div class="form-row-2col">
-              <div>
-                <label class="input-label" for="inCuCat">分野 <span class="req">*</span></label>
-                <select id="inCuCat" class="simple-input">
-                  <option value="ai">AI</option>
-                  <option value="cloud">クラウド</option>
-                  <option value="security">セキュリティ</option>
-                </select>
-              </div>
-              <div>
-                <label class="input-label" for="inCuSource">出典 / メディア <span class="req">*</span></label>
-                <input type="text" id="inCuSource" class="simple-input" required placeholder="例: AWS 公式ブログ">
-              </div>
-            </div>
-            <div class="form-row">
-              <label class="input-label" for="inCuUrl">URL</label>
-              <input type="url" id="inCuUrl" class="simple-input" placeholder="https://...">
-            </div>
-            <div class="form-row">
-              <label class="input-label" for="inCuAction">次の行動 <span class="req">*</span></label>
-              <select id="inCuAction" class="simple-input">
-                <option value="試す">🧪 試す（手を動かして確認）</option>
-                <option value="設定を確認する">⚙️ 設定を確認する（自分の環境と照合）</option>
-                <option value="既存知識と比較する">🧠 既存知識と比較する</option>
-                <option value="チーム向けに説明する">🗣️ チーム向けに説明する（3分で話せる形に）</option>
-              </select>
-            </div>
-            <div class="form-row">
-              <label class="input-label" for="inCuNotes">要点メモ</label>
-              <input type="text" id="inCuNotes" class="simple-input" placeholder="例: プロンプトインジェクション検知ルールの整理">
-            </div>
-            <button type="submit" class="btn btn-primary">記事を登録</button>
-          </form>
-        </div>
-
-        <div class="card">
-          <h3 class="card-heading">📚 登録済みの素材 <span class="count-label" id="itemCount"></span></h3>
-          <div class="item-list" id="itemList"></div>
         </div>
       </section>
 

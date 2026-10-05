@@ -48,6 +48,17 @@ body {
   padding: 24px 20px 60px;
 }
 
+.nw-card { border-color: var(--accent-blue); }
+.nw-card .learning-lanes { margin: 16px 0; }
+.nw-card .learning-lanes { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.nw-card .reading-list { max-height: 620px; overflow-y: auto; }
+.nw-card .reading-row { gap: 12px; }
+@media (max-width: 520px) {
+  .nw-card .learning-lanes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .nw-card .reading-row { align-items: flex-start; flex-wrap: wrap; }
+  .nw-card .reading-main { min-width: 0; flex-basis: 100%; }
+}
+
 /* ヘッダー */
 .app-header {
   display: flex;

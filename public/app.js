@@ -25,6 +25,7 @@ const STATE = {
 };
 
 const CATEGORY_NAMES = {
+  nw: 'ネットワークスペシャリスト',
   sc: '支援士',
   ai: 'AI',
   cloud: 'クラウド',
@@ -59,7 +60,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   initFilterPills();
   initHeroActions();
   initRunMode();
-  initRegisterForms();
   initSettings();
   initAuthButtons();
   initQuiz();
@@ -72,6 +72,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 async function startApp() {
+  loadLibrary();
   setHidden('authScreen', true);
   setHidden('appShell', false);
   STATE.offline = false;
@@ -289,12 +290,11 @@ function switchTab(tabName) {
     loadReviewList();
   } else if (tabName === 'library') {
     loadLibrary();
-  } else if (tabName === 'register') {
-    loadItemList();
   } else if (tabName === 'settings') {
     checkJevStatus();
   } else if (tabName === 'quest') {
     updateReviewBadge();
+    loadLibrary();
   }
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -344,7 +344,7 @@ async function loadRecommendedQuest() {
   try {
     const data = await api('/api/quest/recommend', { body: STATE.conditions });
     if (!data.quest) {
-      titleEl.textContent = '候補が見つかりませんでした。「素材を登録」から問題や記事を追加してください。';
+      titleEl.textContent = '候補が見つかりませんでした。「試験問題」から演習を選んでください。';
       return;
     }
     STATE.currentQuest = { ...data.quest, decisionSource: data.decisionSource };
@@ -392,7 +392,15 @@ function initHeroActions() {
     if (e.key === 'Escape') closeCandidatesModal();
   });
 
-  document.getElementById('btnCompNext').addEventListener('click', loadRecommendedQuest);
+  document.getElementById('btnCompNext').addEventListener('click', () => {
+    const questions = STATE.library?.network || [];
+    const current = questions.find(q=>q.itemId===STATE.currentQuest?.itemId);
+    if (current) {
+      const next=questions.find(q=>q.year===current.year&&q.part===current.part&&q.no>current.no&&!q.attempted);
+      if(next) startNetworkQuestion(next);
+      else switchTab('library');
+    } else loadRecommendedQuest();
+  });
 
   document.getElementById('btnSetupKey').addEventListener('click', () => {
     switchTab('settings');
@@ -448,6 +456,7 @@ function startQuestRun(quest) {
     return;
   }
   STATE.currentQuest = quest;
+  STATE.nwGraded = false;
   setHidden('questHeroCard', true);
   setHidden('completionBanner', true);
   setHidden('questRunCard', false);
@@ -491,6 +500,9 @@ function startQuestRun(quest) {
   document.getElementById('inputMistakeDetail').value = '';
   selectPill('evalPills', 'true');
   setEvalState(true);
+  if (quest.category === 'nw') {
+    document.querySelectorAll('#evalPills .pill').forEach(p=>p.classList.remove('active'));
+  }
 
   startTimer(minutes);
   document.getElementById('questRunCard').scrollIntoView({ behavior: 'smooth' });
@@ -508,7 +520,7 @@ function initRunMode() {
     setHidden('questHeroCard', false);
   });
 
-  setupPills('evalPills', val => setEvalState(val === 'true'));
+  setupPills('evalPills', val => { STATE.nwGraded = true; setEvalState(val === 'true'); });
   setupPills('mistakePills', val => { STATE.mistakeReason = val; });
 
   document.getElementById('inputAnswer').addEventListener('input', updateCharCount);
@@ -582,6 +594,10 @@ function updateTimerText() {
 }
 
 async function handleCompleteQuest() {
+  if (STATE.currentQuest?.category === 'nw' && !STATE.nwGraded) {
+    showToast('公式解答と照合して「できた／できなかった」を選んでから保存してください', 'warn');
+    return;
+  }
   const ans = document.getElementById('inputAnswer').value.trim();
   if (!ans) {
     showToast('答案またはメモを入力してください', 'error');
@@ -610,7 +626,7 @@ async function handleCompleteQuest() {
     mistakeReason: STATE.isCorrect ? '' : STATE.mistakeReason,
     mistakeDetail: document.getElementById('inputMistakeDetail').value.trim(),
     keywords: document.getElementById('inputKeywords').value.trim(),
-    questionText: document.getElementById('inputQuestionText').value.trim()
+    questionText: document.getElementById('inputQuestionText').value.trim() || quest.questionText || ''
   };
 
   try {
@@ -634,6 +650,13 @@ function renderCompletion(data) {
   setHidden('completionBanner', false);
 
   const ev = data.evaluation || {};
+  const network = STATE.library?.network?.find(q=>q.itemId===STATE.currentQuest?.itemId);
+  if (network && data.history) {
+    network.attempted=true;
+    network.done=data.history.isCorrect===true;
+    network.historyId=data.history.id;
+  }
+  document.getElementById('btnCompNext').textContent = network ? '同じ区分の次の問題へ' : '次のクエストへ';
   const byJev = ev.decisionSource === 'jev';
   document.getElementById('compTitle').textContent = 'お疲れさまでした！';
   document.getElementById('compScoreTag').textContent = `理解度: ${SCORE_LABELS[ev.understandingScore] || ev.understandingScore}`;
@@ -685,6 +708,37 @@ function renderCompletion(data) {
   }
 
   document.getElementById('completionBanner').scrollIntoView({ behavior: 'smooth' });
+}
+
+function startNetworkQuestion(q, retryOf) {
+  switchTab('quest');
+  startQuestRun({
+    type:'過去問を解く', category:'nw', title:`NW ${q.title}`, sourceRef:q.sourceLabel,
+    questionText:`${q.sourceLabel}\n\n公式問題冊子を別タブで開き、問${q.no}を解いてください。図表・選択肢・字数制限は原文で確認します。\n練習時間: ${q.minutes}分（本試験: ${q.note}）\n\n${q.kind==='choice'?'答案欄にア・イ・ウ・エと判断理由を書いてください。':'大問内の全設問を「設問1(1): …」の形で書いてください。'}\n解き終わったら公式解答を開いて自己採点し、「できた／できなかった」を選んで保存します。自己採点は公式得点ではありません。`,
+    url:q.questionPdf, answerUrl:q.answerPdf, recommendedMinutes:q.minutes,
+    itemId:q.itemId, historyId:retryOf || (q.attempted && !q.done ? q.historyId : null),
+    reason:'公式過去問を解き、判断の根拠とつまずきを記録します。',
+    criteria:q.kind==='choice'?'選択肢と理由を書き、公式解答と自己採点すること。':'大問内の全設問に答え、公式解答例と自己採点すること。',
+    decisionSource:'manual'
+  });
+}
+
+function renderNetworkList() {
+  if(!STATE.library) return;
+  const all=STATE.library.network || [];
+  document.getElementById('nwCount').textContent=`演習済み ${all.filter(q=>q.attempted).length} / ${all.length}問`;
+  const names={am1:'午前Ⅰ',am2:'午前Ⅱ',pm1:'午後Ⅰ',pm2:'午後Ⅱ'};
+  document.getElementById('nwProgress').innerHTML=Object.entries(names).map(([part,name])=>{
+    const qs=all.filter(q=>q.part===part);
+    return `<div class="learning-lane"><div class="learning-lane-name">${name}</div><div class="learning-lane-progress">${qs.filter(q=>q.attempted).length} / ${qs.length}</div><div class="learning-lane-detail">自己採点でできた ${qs.filter(q=>q.done).length}問</div></div>`;
+  }).join('');
+  const year=Number(document.getElementById('nwYear').value);
+  const part=document.getElementById('nwPart').value;
+  const filter=STATE.nwFilter || 'all';
+  const qs=all.filter(q=>q.year===year&&q.part===part&&(filter==='all'||filter==='todo'&&!q.attempted||filter==='review'&&q.attempted&&!q.done||filter==='done'&&q.done));
+  const list=document.getElementById('nwList');
+  list.innerHTML=qs.length ? qs.map(q=>`<div class="reading-row"><div class="reading-main"><div class="reading-tags"><span class="tag tag-cat">${escapeHtml(q.title)}</span><span class="tag tag-time">${q.minutes}分</span><span class="tag tag-source">${q.done?'自己採点でできた':q.attempted?'要復習':'未着手'}</span></div><p class="reading-focus">${escapeHtml(q.note)} ・ <a class="run-link" href="${escapeHtml(q.questionPdf)}" target="_blank" rel="noopener noreferrer">公式問題冊子 ↗</a></p></div><button class="btn btn-secondary btn-sm" data-nw="${escapeHtml(q.itemId)}" type="button">${q.attempted?'もう一度解く':'解く'}</button></div>`).join('') : '<p class="text-muted">この条件に該当する問題はありません。</p>';
+  list.querySelectorAll('[data-nw]').forEach(btn=>btn.addEventListener('click',()=>startNetworkQuestion(all.find(q=>q.itemId===btn.dataset.nw))));
 }
 
 async function requestClaudeReview() {
@@ -759,6 +813,8 @@ async function loadReviewList() {
         btn.addEventListener('click', () => {
           const target = history.find(item => item.id === btn.getAttribute('data-hid'));
           if (!target) return;
+          const network = contentData?.network?.find(q=>q.itemId===target.itemId);
+          if(network) { startNetworkQuestion(network,target.id); return; }
           const item = items.find(i => i.id === target.itemId);
           switchTab('quest');
           startQuestRun({
@@ -814,7 +870,9 @@ function renderLearningLanes(content, items, history) {
   const techItems = items.filter(i => i.type === 'catchup' && ['ai', 'cloud', 'security'].includes(i.category));
   const completedTechItems = techItems.filter(i => history.some(h => h.itemId === i.id && h.isCorrect)).length;
   const readings = content.readings || [];
+  const network = content.network || [];
   const lanes = [
+    ...['am1','am2','pm1','pm2'].map(part=>{ const qs=network.filter(q=>q.part===part); return {name:`NW ${{am1:'午前Ⅰ',am2:'午前Ⅱ',pm1:'午後Ⅰ',pm2:'午後Ⅱ'}[part]}`,done:qs.filter(q=>q.attempted).length,total:qs.length,detail:`自己採点でできた ${qs.filter(q=>q.done).length}・要復習 ${qs.filter(q=>q.attempted&&!q.done).length}`}; }),
     { name: '応用情報 午前 / 科目A-1', done: ap.studied, total: ap.total, detail: `定着 ${ap.mastered}問・復習待ち ${ap.due}問` },
     { name: '支援士 午前II / 科目A-2', done: sc.studied, total: sc.total, detail: `定着 ${sc.mastered}問・復習待ち ${sc.due}問` },
     { name: '支援士 記述 / 科目B', done: attemptedWritten, total: written.length, detail: '答案を書いて採点した問題' },
@@ -866,64 +924,6 @@ async function updateReviewBadge() {
   } catch (e) { /* バッジ更新失敗は無視 */ }
 }
 
-// --- 6. 素材の登録 ---
-function initRegisterForms() {
-  document.querySelectorAll('.subtab').forEach(st => {
-    st.addEventListener('click', () => {
-      document.querySelectorAll('.subtab').forEach(b => b.classList.remove('active'));
-      st.classList.add('active');
-      const target = st.getAttribute('data-sub');
-      document.getElementById('formSimpleSC').classList.toggle('active', target === 'sub-sc');
-      document.getElementById('formSimpleCU').classList.toggle('active', target === 'sub-cu');
-    });
-  });
-
-  document.getElementById('formSimpleSC').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    await postItem({
-      type: 'sc_past_paper',
-      category: 'sc',
-      title: document.getElementById('inScTitle').value.trim(),
-      source: document.getElementById('inScSource').value.trim(),
-      publishedDate: document.getElementById('inScDate').value,
-      questionText: document.getElementById('inScQuestion').value.trim(),
-      notes: document.getElementById('inScNotes').value.trim(),
-      keywords: document.getElementById('inScKeywords').value.trim(),
-      url: document.getElementById('inScUrl').value.trim(),
-      nextAction: '既存知識と比較する'
-    }, e.target);
-  });
-
-  document.getElementById('formSimpleCU').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    await postItem({
-      type: 'catchup',
-      category: document.getElementById('inCuCat').value,
-      title: document.getElementById('inCuTitle').value.trim(),
-      source: document.getElementById('inCuSource').value.trim(),
-      url: document.getElementById('inCuUrl').value.trim(),
-      nextAction: document.getElementById('inCuAction').value,
-      notes: document.getElementById('inCuNotes').value.trim()
-    }, e.target);
-  });
-}
-
-async function postItem(payload, formEl) {
-  try {
-    const data = await api('/api/registered-items', { body: payload });
-    if (data.success) {
-      showToast('登録しました。今後のクエスト候補に加わります', 'success');
-      formEl.reset();
-      loadItemList();
-      loadRecommendedQuest();
-    } else {
-      showToast(data.error || '登録に失敗しました', 'error');
-    }
-  } catch (err) {
-    showToast('通信エラーが発生しました', 'error');
-  }
-}
-
 async function loadItemList() {
   const list = document.getElementById('itemList');
   try {
@@ -931,7 +931,7 @@ async function loadItemList() {
     const items = data.items || [];
     document.getElementById('itemCount').textContent = `${items.length}件`;
     if (items.length === 0) {
-      list.innerHTML = '<p class="text-muted">まだ素材がありません。上のフォームから登録しましょう。</p>';
+      list.innerHTML = '<p class="text-muted">まだ保存済み教材はありません。同梱教材から学習できます。</p>';
       return;
     }
     list.innerHTML = items.map(i => `
@@ -1392,6 +1392,8 @@ function renderQuizReviewCard(stats) {
 
 // --- 9. 教材タブ ---
 function initLibrary() {
+  ['nwYear','nwPart'].forEach(id=>document.getElementById(id).addEventListener('change',renderNetworkList));
+  setupPills('nwFilterPills', val=>{ STATE.nwFilter=val; renderNetworkList(); });
   const formatSelect = document.getElementById('libFormat');
   formatSelect.value = preferredQuizFormat();
   formatSelect.addEventListener('change', () => storageSet(QUIZ_FORMAT_KEY, formatSelect.value));
@@ -1416,7 +1418,7 @@ function initLibrary() {
       category: 'sc',
       title: `一問一答: ${examName}（${labels.join('・')}・${count}問）`,
       quiz: { exam, session, group, mode, count, format },
-      reason: '教材タブから選んだ一問一答です。',
+      reason: '試験問題から選んだ一問一答です。',
       criteria: '答えを見る前に自分の答えを思い浮かべ、正直に採点すること。',
       decisionSource: 'manual'
     });
@@ -1483,7 +1485,9 @@ async function loadLibrary() {
     renderReports(data.quiz.reports);
     applyBarWidths();
     renderWrittenList();
+    renderNetworkList();
     renderReadingList();
+    loadItemList();
     loadAiFeed();
   } catch (e) {
     showToast('教材を読み込めませんでした', 'error');
@@ -1677,8 +1681,7 @@ async function loadAiFeed() {
   const list = document.getElementById('feedList');
   list.innerHTML = '<p class="text-muted">新着を読み込み中...</p>';
   try {
-    const [feed, itemData] = await Promise.all([api('/api/ai-feed'), api('/api/registered-items')]);
-    const registeredUrls = new Set((itemData.items || []).map(i => i.url).filter(Boolean));
+    const feed = await api('/api/ai-feed');
     document.getElementById('feedUpdated').textContent = feed.fetchedAt
       ? `${new Date(feed.fetchedAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 時点`
       : '';
@@ -1697,37 +1700,9 @@ async function loadAiFeed() {
           <a class="reading-title" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.title)} ↗</a>
           ${item.summary ? `<p class="reading-focus">${escapeHtml(item.summary)}</p>` : ''}
         </div>
-        <button class="btn btn-secondary btn-sm" data-feed="${i}" type="button" ${registeredUrls.has(item.url) ? 'disabled' : ''}>
-          ${registeredUrls.has(item.url) ? '追加済み' : '素材に追加'}
-        </button>
       </div>`).join('') + (feed.errors && feed.errors.length
       ? `<p class="field-hint">取得できなかったサイト: ${feed.errors.map(escapeHtml).join('、')}</p>` : '');
 
-    list.querySelectorAll('button[data-feed]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const item = items[parseInt(btn.getAttribute('data-feed'), 10)];
-        btn.disabled = true;
-        const data = await api('/api/registered-items', {
-          body: {
-            type: 'catchup',
-            category: item.sourceId === 'microsoft-security' || item.sourceId === 'arxiv-llm-security' ? 'security' : 'ai',
-            title: item.title,
-            source: item.source,
-            url: item.url,
-            publishedDate: item.publishedAt ? item.publishedAt.slice(0, 10) : '',
-            notes: item.summary,
-            nextAction: '既存知識と比較する'
-          }
-        });
-        if (data.success) {
-          btn.textContent = '追加済み';
-          showToast('素材に追加しました。今日のクエストの候補になります', 'success');
-        } else {
-          btn.disabled = false;
-          showToast(data.error || '追加できませんでした', 'error');
-        }
-      });
-    });
   } catch (e) {
     list.innerHTML = '<p class="text-muted">新着を読み込めませんでした</p>';
   }
