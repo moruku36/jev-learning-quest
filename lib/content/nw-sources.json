@@ -1,0 +1,157 @@
+[
+  {
+    "year": 2025,
+    "session": "07_haru",
+    "source": "https://www.ipa.go.jp/shiken/mondai-kaiotu/2025r07.html",
+    "parts": {
+      "am1": {
+        "questionPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/nl10bi0000009lh8-att/2025r07h_koudo_am1_qs.pdf",
+        "answerPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/nl10bi0000009lh8-att/2025r07h_koudo_am1_ans.pdf",
+        "questionPdfPages": 20,
+        "answerPdfPages": 1
+      },
+      "am2": {
+        "questionPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/nl10bi0000009lh8-att/2025r07h_nw_am2_qs.pdf",
+        "answerPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/nl10bi0000009lh8-att/2025r07h_nw_am2_ans.pdf",
+        "questionPdfPages": 16,
+        "answerPdfPages": 1
+      },
+      "pm1": {
+        "questionPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/nl10bi0000009lh8-att/2025r07h_nw_pm1_qs.pdf",
+        "answerPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/nl10bi0000009lh8-att/2025r07h_nw_pm1_ans.pdf",
+        "questionPdfPages": 24,
+        "answerPdfPages": 3
+      },
+      "pm2": {
+        "questionPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/nl10bi0000009lh8-att/2025r07h_nw_pm2_qs.pdf",
+        "answerPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/nl10bi0000009lh8-att/2025r07h_nw_pm2_ans.pdf",
+        "questionPdfPages": 28,
+        "answerPdfPages": 2
+      }
+    }
+  },
+  {
+    "year": 2024,
+    "session": "06_haru",
+    "source": "https://www.ipa.go.jp/shiken/mondai-kaiotu/2024r06.html",
+    "parts": {
+      "am1": {
+        "questionPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/m42obm000000afqx-att/2024r06h_koudo_am1_qs.pdf",
+        "answerPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/m42obm000000afqx-att/2024r06h_koudo_am1_ans.pdf",
+        "questionPdfPages": 20,
+        "answerPdfPages": 1
+      },
+      "am2": {
+        "questionPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/m42obm000000afqx-att/2024r06h_nw_am2_qs.pdf",
+        "answerPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/m42obm000000afqx-att/2024r06h_nw_am2_ans.pdf",
+        "questionPdfPages": 16,
+        "answerPdfPages": 1
+      },
+      "pm1": {
+        "questionPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/m42obm000000afqx-att/2024r06h_nw_pm1_qs.pdf",
+        "answerPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/m42obm000000afqx-att/2024r06h_nw_pm1_ans.pdf",
+        "questionPdfPages": 24,
+        "answerPdfPages": 3
+      },
+      "pm2": {
+        "questionPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/m42obm000000afqx-att/2024r06h_nw_pm2_qs.pdf",
+        "answerPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/m42obm000000afqx-att/2024r06h_nw_pm2_ans.pdf",
+        "questionPdfPages": 28,
+        "answerPdfPages": 2
+      }
+    }
+  },
+  {
+    "year": 2023,
+    "session": "05_haru",
+    "source": "https://www.ipa.go.jp/shiken/mondai-kaiotu/2023r05.html",
+    "parts": {
+      "am1": {
+        "questionPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/ps6vr70000010d6y-att/2023r05h_koudo_am1_qs.pdf",
+        "answerPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/ps6vr70000010d6y-att/2023r05h_koudo_am1_ans.pdf",
+        "questionPdfPages": 20,
+        "answerPdfPages": 1
+      },
+      "am2": {
+        "questionPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/ps6vr70000010d6y-att/2023r05h_nw_am2_qs.pdf",
+        "answerPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/ps6vr70000010d6y-att/2023r05h_nw_am2_ans.pdf",
+        "questionPdfPages": 16,
+        "answerPdfPages": 1
+      },
+      "pm1": {
+        "questionPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/ps6vr70000010d6y-att/2023r05h_nw_pm1_qs.pdf",
+        "answerPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/ps6vr70000010d6y-att/2023r05h_nw_pm1_ans.pdf",
+        "questionPdfPages": 20,
+        "answerPdfPages": 3
+      },
+      "pm2": {
+        "questionPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/ps6vr70000010d6y-att/2023r05h_nw_pm2_qs.pdf",
+        "answerPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/ps6vr70000010d6y-att/2023r05h_nw_pm2_ans.pdf",
+        "questionPdfPages": 24,
+        "answerPdfPages": 3
+      }
+    }
+  },
+  {
+    "year": 2022,
+    "session": "04_haru",
+    "source": "https://www.ipa.go.jp/shiken/mondai-kaiotu/2022r04.html",
+    "parts": {
+      "am1": {
+        "questionPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/gmcbt80000009sgk-att/2022r04h_koudo_am1_qs.pdf",
+        "answerPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/gmcbt80000009sgk-att/2022r04h_koudo_am1_ans.pdf",
+        "questionPdfPages": 16,
+        "answerPdfPages": 1
+      },
+      "am2": {
+        "questionPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/gmcbt80000009sgk-att/2022r04h_nw_am2_qs.pdf",
+        "answerPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/gmcbt80000009sgk-att/2022r04h_nw_am2_ans.pdf",
+        "questionPdfPages": 12,
+        "answerPdfPages": 1
+      },
+      "pm1": {
+        "questionPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/gmcbt80000009sgk-att/2022r04h_nw_pm1_qs.pdf",
+        "answerPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/gmcbt80000009sgk-att/2022r04h_nw_pm1_ans.pdf",
+        "questionPdfPages": 21,
+        "answerPdfPages": 3
+      },
+      "pm2": {
+        "questionPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/gmcbt80000009sgk-att/2022r04h_nw_pm2_qs.pdf",
+        "answerPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/gmcbt80000009sgk-att/2022r04h_nw_pm2_ans.pdf",
+        "questionPdfPages": 28,
+        "answerPdfPages": 2
+      }
+    }
+  },
+  {
+    "year": 2021,
+    "session": "03_haru",
+    "source": "https://www.ipa.go.jp/shiken/mondai-kaiotu/2021r03.html",
+    "parts": {
+      "am1": {
+        "questionPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/gmcbt8000000d5ru-att/2021r03h_koudo_am1_qs.pdf",
+        "answerPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/gmcbt8000000d5ru-att/2021r03h_koudo_am1_ans.pdf",
+        "questionPdfPages": 20,
+        "answerPdfPages": 1
+      },
+      "am2": {
+        "questionPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/gmcbt8000000d5ru-att/2021r03h_nw_am2_qs.pdf",
+        "answerPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/gmcbt8000000d5ru-att/2021r03h_nw_am2_ans.pdf",
+        "questionPdfPages": 12,
+        "answerPdfPages": 1
+      },
+      "pm1": {
+        "questionPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/gmcbt8000000d5ru-att/2021r03h_nw_pm1_qs.pdf",
+        "answerPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/gmcbt8000000d5ru-att/2021r03h_nw_pm1_ans.pdf",
+        "questionPdfPages": 20,
+        "answerPdfPages": 3
+      },
+      "pm2": {
+        "questionPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/gmcbt8000000d5ru-att/2021r03h_nw_pm2_qs.pdf",
+        "answerPdf": "https://www.ipa.go.jp/shiken/mondai-kaiotu/gmcbt8000000d5ru-att/2021r03h_nw_pm2_ans.pdf",
+        "questionPdfPages": 28,
+        "answerPdfPages": 2
+      }
+    }
+  }
+]
