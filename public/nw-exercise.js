@@ -1,5 +1,7 @@
 // Official scanned content, morning key grading and afternoon self-assessment.
+let nwMountGeneration=0;
 async function mountNetworkExercise(quest) {
+  const generation=++nwMountGeneration;
   const host=document.getElementById('nwExercise');
   host.replaceChildren(); host.hidden=quest.category!=='nw';
   const isNW=quest.category==='nw';
@@ -14,7 +16,7 @@ async function mountNetworkExercise(quest) {
   host.textContent='原本画像を読み込んでいます…';
   let q=quest.networkQuestion || STATE.library?.network?.find(q=>q.itemId===quest.itemId);
   if(!q){
-    try{const library=await api('/api/content');if(STATE.currentQuest!==quest)return;STATE.library=library;q=library.network.find(q=>q.itemId===quest.itemId);}
+    try{const library=await api('/api/content');if(generation!==nwMountGeneration || STATE.currentQuest!==quest || document.getElementById('questRunCard').hidden)return;STATE.library=library;q=library.network.find(q=>q.itemId===quest.itemId);}
     catch{host.textContent='問題を読み込めませんでした。もう一度開始してください。';return;}
   }
   if(!q){host.textContent='問題データが見つかりません。';return;}
@@ -56,7 +58,8 @@ async function mountNetworkExercise(quest) {
     const reveal=document.createElement('button');reveal.className='btn btn-outline';reveal.textContent='公式解答例を表示する';
     const official=document.createElement('div');official.hidden=true;
     for(const [i,url]of q.answerImages.entries()){
-      const img=document.createElement('img');img.src=url;img.loading='lazy';img.alt=`${q.sourceLabel} 公式解答例 PDF ${q.answerPages[i]}ページ`;img.className='nw-original';official.append(img);
+      const img=document.createElement('img');img.src=url;img.loading='lazy';img.alt=`${q.sourceLabel} 公式解答例 PDF ${q.answerPages[i]}ページ`;img.className='nw-original';
+      const zoom=document.createElement('a');zoom.href=url;zoom.target='_blank';zoom.rel='noopener';zoom.title='公式解答例の原本画像を拡大して開く';zoom.append(img);official.append(zoom);
     }
     reveal.onclick=()=>{official.hidden=!official.hidden;reveal.textContent=official.hidden?'公式解答例を表示する':'公式解答例を閉じる';};host.append(reveal,official);
     for(const section of q.sections){
@@ -66,7 +69,7 @@ async function mountNetworkExercise(quest) {
         if(sub.invalid){const p=document.createElement('p');p.textContent=`${label}: 不備により設問不成立。採点対象外。`;group.append(p);continue;}
         const field=document.createElement('label');field.textContent=label;
         const answer=document.createElement('textarea');answer.className='simple-input';answer.rows=2;answer.maxLength=2000;answer.dataset.nwAnswer=sub.id;answer.setAttribute('aria-label',`${label}の答案`);field.append(answer);
-        const details=document.createElement('details');const summary=document.createElement('summary');summary.textContent='公式解答例・要点';const text=document.createElement('pre');text.textContent=sub.answer;details.append(summary,text);
+        const details=document.createElement('details');const summary=document.createElement('summary');summary.textContent=`${label}の公式解答例・要点`;const text=document.createElement('pre');text.textContent=sub.answer;details.append(summary,text);
         const score=document.createElement('select');score.className='simple-input';score.dataset.nwScore=sub.id;score.setAttribute('aria-label',`${label}の自己採点`);
         for(const [value,text]of [['','自己採点を選ぶ'],['true','できた'],['false','できなかった']]){const option=document.createElement('option');option.value=value;option.textContent=text;score.append(option);}
         score.onchange=()=>setEvalState([...host.querySelectorAll('[data-nw-score]')].every(s=>s.value!=='false'));

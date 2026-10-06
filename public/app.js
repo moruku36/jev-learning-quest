@@ -3,6 +3,7 @@
 const STATE = {
   activeTab: 'quest',
   currentQuest: null,
+  questRequestId: 0,
   allCandidates: [],
   jev: { jevConfigured: false, keySource: 'none', maskedKey: '' },
   conditions: {
@@ -336,17 +337,21 @@ function selectPill(containerId, value) {
 
 // --- 3. クエスト推薦と表示 ---
 async function loadRecommendedQuest() {
+  const requestId = ++STATE.questRequestId;
   const titleEl = document.getElementById('heroTitle');
   const heroCard = document.getElementById('questHeroCard');
   titleEl.textContent = STATE.jev.jevConfigured ? 'Jev が今日のクエストを選んでいます...' : '今日のクエストを選んでいます...';
   heroCard.classList.add('loading');
+  document.getElementById('btnStartHero').disabled = true;
 
   try {
     const data = await api('/api/quest/recommend', { body: STATE.conditions });
+    if (requestId !== STATE.questRequestId) return;
     if (!data.quest) {
       titleEl.textContent = '候補が見つかりませんでした。「試験問題」から演習を選んでください。';
       return;
     }
+    if (!canReplaceQuestRun()) return;
     STATE.currentQuest = { ...data.quest, decisionSource: data.decisionSource };
     STATE.allCandidates = data.allCandidates || [];
     renderHeroQuest(STATE.currentQuest, data.decisionSource, data.decisionNote);
@@ -354,10 +359,19 @@ async function loadRecommendedQuest() {
     titleEl.textContent = 'クエストの取得に失敗しました。サーバーが起動しているか確認してください。';
   } finally {
     heroCard.classList.remove('loading');
+    if (requestId === STATE.questRequestId) {
+      document.getElementById('btnStartHero').disabled = false;
+      if (STATE.currentQuest) titleEl.textContent = STATE.currentQuest.title;
+    }
   }
 }
 
 function renderHeroQuest(quest, decisionSource, decisionNote) {
+  STATE.currentQuest = quest;
+  document.getElementById('btnStartHero').disabled = false;
+  stopTimer();
+  STATE.quiz = null;
+  setHidden('quizRunCard', true);
   document.getElementById('heroTitle').textContent = quest.title;
   document.getElementById('heroCategory').textContent = categoryName(quest.category);
   document.getElementById('heroType').textContent = quest.type;
@@ -435,6 +449,8 @@ function openCandidatesModal() {
         <p>${escapeHtml(cand.reason)}</p>
       `;
       item.addEventListener('click', () => {
+        if (!canReplaceQuestRun()) { closeCandidatesModal(); return; }
+        ++STATE.questRequestId;
         STATE.currentQuest = { ...cand, decisionSource: 'manual' };
         renderHeroQuest(STATE.currentQuest, 'manual', 'あなたが候補から選んだクエストです。');
         closeCandidatesModal();
@@ -450,11 +466,35 @@ function closeCandidatesModal() {
   setHidden('questListModal', true);
 }
 
+// Navigation can hide a running panel without saving its inputs.
+function hasUnsavedQuestAnswers() {
+  if (!document.getElementById('questRunCard').hidden) {
+    if (['inputAnswer','inputMistakeDetail','inputQuestionText'].some(id=>document.getElementById(id).value.trim())) return true;
+    if (STATE.currentQuest?.category==='nw' && (STATE.nwChoice ||
+      [...document.querySelectorAll('[data-nw-answer], [data-nw-score]')].some(i=>i.value.trim()))) return true;
+  }
+  return !document.getElementById('quizRunCard').hidden && Boolean(STATE.quiz?.answers.length || STATE.quiz?.confidence);
+}
+function canReplaceQuestRun(message='未保存の答案があります。破棄して別の課題へ進みますか？') {
+  if ((!document.getElementById('questRunCard').hidden && document.getElementById('btnCompleteQuest').disabled) || STATE.quiz?.saving) {
+    showToast('保存が終わってから課題を切り替えてください', 'warn');
+    return false;
+  }
+  if (hasUnsavedQuestAnswers() && !confirm(message)) {
+    switchTab('quest');
+    return false;
+  }
+  return true;
+}
 function startQuestRun(quest) {
   if (quest.type === '一問一答') {
     startQuizRun(quest);
     return;
   }
+  if (!canReplaceQuestRun()) return;
+  ++STATE.questRequestId;
+  STATE.quiz = null;
+  setHidden('quizRunCard', true);
   STATE.currentQuest = quest;
   STATE.nwGraded = false;
   setHidden('questHeroCard', true);
@@ -514,11 +554,10 @@ function initRunMode() {
   document.getElementById('btnTimerPlayPause').addEventListener('click', toggleTimer);
 
   document.getElementById('btnCancelRun').addEventListener('click', () => {
-    const hasInput = document.getElementById('inputAnswer').value.trim() !== '' || (STATE.currentQuest?.category==='nw' && (STATE.nwChoice || [...document.querySelectorAll('[data-nw-answer]')].some(i=>i.value.trim())));
-    if (hasInput && !confirm('入力した答案は保存されません。中断しますか？')) return;
-    stopTimer();
-    setHidden('questRunCard', true);
-    setHidden('questHeroCard', false);
+    if (!canReplaceQuestRun('入力した答案は保存されません。中断しますか？')) return;
+    ++STATE.questRequestId;
+    renderHeroQuest(STATE.currentQuest, STATE.currentQuest.decisionSource || 'manual',
+      '中断した課題です。再開始すると答案とタイマーは最初からになります。');
   });
 
   setupPills('evalPills', val => { STATE.nwGraded = true; setEvalState(val === 'true'); });
@@ -652,6 +691,7 @@ async function handleCompleteQuest() {
 }
 
 function renderCompletion(data) {
+  ++STATE.questRequestId;
   setHidden('questRunCard', true);
   setHidden('completionBanner', false);
 
@@ -1148,6 +1188,7 @@ function initQuiz() {
 }
 
 async function startQuizRun(quest) {
+  const previousRequestId = STATE.questRequestId;
   const quiz = { format: preferredQuizFormat(), ...(quest.quiz || {}) };
   let cards;
   if (STATE.offline) {
@@ -1172,6 +1213,9 @@ async function startQuizRun(quest) {
     return;
   }
 
+  if (previousRequestId !== STATE.questRequestId) return;
+  if (!canReplaceQuestRun()) return;
+  ++STATE.questRequestId;
   stopTimer();
   STATE.currentQuest = quest;
   STATE.quiz = { quest, cards, index: 0, answers: [], startedAt: Date.now(), saving: false, format: quiz.format, confidence: null };

@@ -41,3 +41,7 @@ Checked 2026-10-06 JST (2026-10-05 UTC), against downloaded official IPA PDFs.
 | 2021 | pm1 | 3 | 14–18 | 3 | 1:1, 2:2, 3:2, 4:5 |
 | 2021 | pm2 | 1 | 2–13 | 1 | 1:2, 2:2, 3:2, 4:2, 5:1, 6:8 |
 | 2021 | pm2 | 2 | 14–25 | 2 | 1:3, 2:5, 3:4, 4:3 |
+
+## Independent review follow-up
+
+See [fixes, regression evidence and outstanding browser checks](nw-review-fixes.md). The 375px SE3 and native-dialog checks remain unverified; the earlier 390px check does not substitute for them.

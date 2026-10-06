@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node test_verification.js && node test_update_readings.js && node test_network_exams.js",
+    "test": "node test_verification.js && node test_update_readings.js && node test_network_exams.js && node test_run_transitions.js",
     "update-readings": "node scripts/update-readings.js"
   },
   "keywords": [
