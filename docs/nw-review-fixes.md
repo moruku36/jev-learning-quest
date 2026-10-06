@@ -52,3 +52,12 @@ subquestions against head 44a6a4d. This follow-up changes no question assets, so
 metadata, answer keys, user data, storage schema or periodic reading workflow.
 
 Draft PR remains unmerged and production publication remains on hold.
+
+## Stale fallback failures
+
+The NW content fallback's error handler now checks the mount generation, current
+quest identity and visible running card, exactly as the successful response does.
+A failed request for an older/interrupted exercise cannot replace the new display
+with an error. VM regressions cover a stale failure after a newer NW mount, active
+failure feedback, interruption and changed quest identity without another mount.
+These checks do not replace the real browser checks listed above.

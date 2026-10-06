@@ -2,7 +2,7 @@
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
 function harness(){
  const nodes=new Map(),responses=[];let accept=false,prompts=0;
- const el=id=>{if(!nodes.has(id))nodes.set(id,{id,value:'',textContent:'',hidden:true,disabled:false,listeners:{},children:[],appendChild(n){this.children.push(n)},classList:{add(){},remove(){},toggle(){}},addEventListener(e,fn){this.listeners[e]=fn},scrollIntoView(){},focus(){},replaceChildren(){this.children=[]},closest(){return el(this.id+'-parent')}});return nodes.get(id);};
+ const el=id=>{if(!nodes.has(id))nodes.set(id,{id,value:'',textContent:'',hidden:true,disabled:false,listeners:{},children:[],appendChild(n){this.children.push(n)},append(...nodes){this.children.push(...nodes)},setAttribute(){},classList:{add(){},remove(){},toggle(){}},addEventListener(e,fn){this.listeners[e]=fn},scrollIntoView(){},focus(){},replaceChildren(){this.children=[];this.textContent=''},closest(){return el(this.id+'-parent')}});return nodes.get(id);};
  let created=0;
  const ctx=vm.createContext({document:{addEventListener(){},createElement(){return el('created-'+(++created));},getElementById:el,querySelector(s){return s.includes('eval-row')?el('eval-row'):null},querySelectorAll(s){return s.includes('data-nw-')?responses:[];}},window:{scrollTo(){}},URLSearchParams,console,setTimeout,clearTimeout,setInterval,clearInterval,localStorage:{getItem(){return null},setItem(){}},confirm(){prompts++;return accept;}});
  vm.runInContext(fs.readFileSync('public/app.js','utf8'),ctx);
@@ -43,6 +43,28 @@ const second={...first,title:'2025 pm2 Q2',itemId:'exam:nw-07_haru-pm2-2'};
  const staleMount=mounted.run('mountNetworkExercise(first)');
  mounted.run("STATE.currentQuest={category:'ai'};mountNetworkExercise(STATE.currentQuest)");
  releaseContent({network:[]});await staleMount;assert.equal(mounted.run('STATE.nwQuestion'),null);assert.equal(mounted.el('nwExercise').hidden,true);
+ // A stale fallback failure must not overwrite a newer NW exercise's display.
+ const failed=harness();failed.ctx.first={...first,category:'nw'};failed.ctx.second={...second,category:'nw'};
+ failed.run("STATE.currentQuest=first;document.getElementById('questRunCard').hidden=false");
+ vm.runInContext(fs.readFileSync('public/nw-exercise.js','utf8'),failed.ctx);
+ let rejectContent;failed.ctx.loadContent=()=>new Promise((resolve,reject)=>{rejectContent=reject});failed.run('api=loadContent');
+ const staleFailure=failed.run('mountNetworkExercise(first)');
+ // Q2 fully renders before the older Q1 request fails.
+ let resolveCurrent,rejectCurrent;failed.ctx.loadCurrent=()=>new Promise((resolve,reject)=>{resolveCurrent=resolve;rejectCurrent=reject});failed.run('api=loadCurrent;STATE.currentQuest=second');
+ const currentMount=failed.run('mountNetworkExercise(second)');
+ resolveCurrent({network:[{...second,kind:'choice',sourceLabel:'NW Q2',images:['/q2.webp'],pdfPages:[1],correctChoice:'ア'}]});await currentMount;
+ const renderedChildren=failed.el('nwExercise').children.length;assert(renderedChildren>0);
+ rejectContent(new Error('Older request failed'));await staleFailure;
+ assert.equal(failed.el('nwExercise').textContent,'');assert.equal(failed.el('nwExercise').children.length,renderedChildren);assert.equal(failed.run('STATE.nwQuestion.itemId'),second.itemId);assert.equal(failed.run('STATE.currentQuest.itemId'),second.itemId);
+ // An active failure still displays the actionable error.
+ failed.run('STATE.library=null');const activeFailure=failed.run('mountNetworkExercise(second)');
+ rejectCurrent(new Error('Current request failed'));await activeFailure;
+ assert.equal(failed.el('nwExercise').textContent,'問題を読み込めませんでした。もう一度開始してください。');
+ // Interruption invalidates a load even if no subsequent mount increments its generation.
+ const interrupted=failed.run('mountNetworkExercise(second)');failed.el('questRunCard').hidden=true;failed.el('nwExercise').textContent='Interrupted display';
+ rejectCurrent(new Error('Interrupted request failed'));await interrupted;assert.equal(failed.el('nwExercise').textContent,'Interrupted display');
+ const replaced=failed.run("document.getElementById('questRunCard').hidden=false;mountNetworkExercise(second)");failed.run('STATE.currentQuest=first');failed.el('nwExercise').textContent='Replacement display';
+ rejectCurrent(new Error('Replaced request failed'));await replaced;assert.equal(failed.el('nwExercise').textContent,'Replacement display');
  // Saving cannot be interrupted, even by a confirmed switch.
  h.el('btnCompleteQuest').disabled=true;h.setAccept(true);count=h.prompts();h.run('startNetworkQuestion(first)');assert.equal(h.prompts(),count);assert.equal(h.run('STATE.currentQuest.itemId'),second.itemId);
  console.log('Front-end VM: cancel/restart hero identity, protected NW/quiz/recommendation switches, late responses and in-flight save passed. Native confirm and SE3 remain browser checks.');

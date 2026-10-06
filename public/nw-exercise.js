@@ -17,7 +17,7 @@ async function mountNetworkExercise(quest) {
   let q=quest.networkQuestion || STATE.library?.network?.find(q=>q.itemId===quest.itemId);
   if(!q){
     try{const library=await api('/api/content');if(generation!==nwMountGeneration || STATE.currentQuest!==quest || document.getElementById('questRunCard').hidden)return;STATE.library=library;q=library.network.find(q=>q.itemId===quest.itemId);}
-    catch{host.textContent='問題を読み込めませんでした。もう一度開始してください。';return;}
+    catch{if(generation!==nwMountGeneration || STATE.currentQuest!==quest || document.getElementById('questRunCard').hidden)return;host.textContent='問題を読み込めませんでした。もう一度開始してください。';return;}
   }
   if(!q){host.textContent='問題データが見つかりません。';return;}
   STATE.nwQuestion=q;
