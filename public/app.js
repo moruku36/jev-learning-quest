@@ -1439,7 +1439,10 @@ async function finishQuiz() {
     }
     const data = await api('/api/quiz/answers', { body: payload });
     if (!data.success) {
-      showToast(data.error || '結果を保存できませんでした。「次へ」で再送できます', 'error');
+      const retryHint=quiz.index>=quiz.cards.length
+        ? '「次へ」で再送できます。'
+        : '回答を続けるか、「中断する」でここまでの結果を再送できます。';
+      showToast(`${data.error || '結果を保存できませんでした'} · ${retryHint}`, 'error');
       // Only a completed deck has moved beyond the rendered card. A partial quit
       // must keep its current question so continuing and retrying stay aligned.
       if(quiz.index>=quiz.cards.length)quiz.index=Math.max(0,quiz.cards.length-1);
