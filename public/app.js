@@ -414,7 +414,7 @@ function initHeroActions() {
       STATE.currentQuest=quest;
       STATE.quiz={quest,cards:cards.slice(),index:0,answers:[],startedAt:Date.now(),saving:false,format,confidence:null,practice:true};
       setHidden('completionBanner',true);setHidden('questHeroCard',true);setHidden('questRunCard',true);setHidden('quizRunCard',false);
-      document.getElementById('quizTitle').textContent='間違えた問題をもう一度';
+      document.getElementById('quizTitle').textContent='間違えた問題をもう一度（練習・保存しません）';
       renderQuizCard();
       document.getElementById('quizRunCard').scrollIntoView({behavior:'smooth'});
     } else if(STATE.nwRetry) startNetworkQuestion(STATE.nwRetry.question,STATE.nwRetry.historyId,true);
@@ -514,7 +514,8 @@ function startQuestRun(quest) {
   setHidden('completionBanner', true);
   setHidden('questRunCard', false);
 
-  document.getElementById('runTitle').textContent = quest.title;
+  document.getElementById('runTitle').textContent = quest.practice ? quest.title+'（練習・保存しません）' : quest.title;
+  document.getElementById('btnCompleteQuest').textContent = quest.practice ? '練習を終了' : '保存して完了 ✅';
   document.getElementById('runCatTag').textContent = categoryName(quest.category);
   document.getElementById('runTypeTag').textContent = quest.type;
   const minutes = quest.recommendedMinutes || STATE.conditions.minutes || 20;
@@ -1399,7 +1400,9 @@ async function sendQuizReport() {
 async function quitQuiz() {
   const quiz = STATE.quiz;
   if (quiz && quiz.answers.length > 0
-    && confirm(`ここまでの${quiz.answers.length}問の結果を保存して終わりますか？\n（キャンセルすると保存せずに中断します）`)) {
+    && confirm(quiz.practice
+      ? `ここまでの${quiz.answers.length}問の練習を終了しますか？\nこの再挑戦は保存されません。`
+      : `ここまでの${quiz.answers.length}問の結果を保存して終わりますか？\n（キャンセルすると保存せずに中断します）`)) {
     await finishQuiz();
     return;
   }
@@ -1437,7 +1440,9 @@ async function finishQuiz() {
     const data = await api('/api/quiz/answers', { body: payload });
     if (!data.success) {
       showToast(data.error || '結果を保存できませんでした。「次へ」で再送できます', 'error');
-      quiz.index=Math.max(0,quiz.cards.length-1);
+      // Only a completed deck has moved beyond the rendered card. A partial quit
+      // must keep its current question so continuing and retrying stay aligned.
+      if(quiz.index>=quiz.cards.length)quiz.index=Math.max(0,quiz.cards.length-1);
       return;
     }
     STATE.quiz = null;
