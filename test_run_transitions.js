@@ -2,7 +2,7 @@
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
 function harness(){
  const nodes=new Map(),responses=[];let accept=false,prompts=0;
- const el=id=>{if(!nodes.has(id))nodes.set(id,{id,value:'',textContent:'',hidden:true,disabled:false,listeners:{},children:[],appendChild(n){this.children.push(n)},append(...nodes){this.children.push(...nodes)},setAttribute(){},classList:{add(){},remove(){},toggle(){}},addEventListener(e,fn){this.listeners[e]=fn},scrollIntoView(){},focus(){},replaceChildren(){this.children=[];this.textContent=''},closest(){return el(this.id+'-parent')}});return nodes.get(id);};
+ const el=id=>{if(!nodes.has(id))nodes.set(id,{id,value:'',textContent:'',hidden:true,disabled:false,listeners:{},style:{},children:[],appendChild(n){this.children.push(n)},append(...nodes){this.children.push(...nodes)},setAttribute(){},classList:{add(){},remove(){},toggle(){}},addEventListener(e,fn){this.listeners[e]=fn},scrollIntoView(){},focus(){},replaceChildren(){this.children=[];this.textContent=''},closest(){return el(this.id+'-parent')}});return nodes.get(id);};
  let created=0;
  const ctx=vm.createContext({document:{addEventListener(){},createElement(){return el('created-'+(++created));},getElementById:el,querySelector(s){return s.includes('eval-row')?el('eval-row'):null},querySelectorAll(s){return s.includes('data-nw-')?responses:[];}},window:{scrollTo(){}},URLSearchParams,console,setTimeout,clearTimeout,setInterval,clearInterval,localStorage:{getItem(){return null},setItem(){}},confirm(){prompts++;return accept;}});
  vm.runInContext(fs.readFileSync('public/app.js','utf8'),ctx);
