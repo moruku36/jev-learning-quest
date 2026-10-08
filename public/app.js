@@ -1436,7 +1436,8 @@ async function finishQuiz() {
     }
     const data = await api('/api/quiz/answers', { body: payload });
     if (!data.success) {
-      showToast(data.error || '結果を保存できませんでした', 'error');
+      showToast(data.error || '結果を保存できませんでした。「次へ」で再送できます', 'error');
+      quiz.index=Math.max(0,quiz.cards.length-1);
       return;
     }
     STATE.quiz = null;

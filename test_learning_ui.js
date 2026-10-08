@@ -55,6 +55,10 @@ const {NW_QUESTIONS}=require('./lib/content/nw-exams');
       await page.evaluate(()=>judgeQuizCard(false));
       assert.equal(await page.evaluate(()=>STATE.quiz.answers.length),1);
       await page.locator('#quizMistakeReason').selectOption('読み落とし');
+      await page.route('**/api/quiz/answers',route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({success:false,error:'test save failure'})}),{times:1});
+      await page.locator('#btnQuizNext').click();
+      await page.waitForFunction(()=>STATE.quiz && !STATE.quiz.saving && STATE.quiz.index===0);
+      assert.equal(await page.locator('#quizAnswerBox').isVisible(),true);
       await page.locator('#btnQuizNext').click();
       await page.waitForFunction(()=>STATE.quiz===null);
       // Actual official question and original pixels, at both screen sizes.
