@@ -8,6 +8,7 @@ const {chromium}=require('playwright');
 const {createApp}=require('./lib/app');
 const {createFileStorage}=require('./lib/storage-file');
 const {NW_QUESTIONS}=require('./lib/content/nw-exams');
+const {QUIZ_CARDS}=require('./lib/content');
 (async()=>{
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'memorization-ui-'));
   const storage=createFileStorage(dir);
@@ -61,6 +62,26 @@ const {NW_QUESTIONS}=require('./lib/content/nw-exams');
       assert.equal(await page.locator('#quizAnswerBox').isVisible(),true);
       await page.locator('#btnQuizNext').click();
       await page.waitForFunction(()=>STATE.quiz===null);
+      // Offline first answer is queued once; practice does not queue a second result.
+      const offlineCard=QUIZ_CARDS.find(c=>!before.quizProgress[c.id]);
+      const storedBeforeOffline=await storage.load();
+      await page.evaluate(card=>{
+        storageSet(OFFLINE_DECK_KEY,JSON.stringify([card]));STATE.offline=true;
+        return startQuizRun({type:'一問一答',category:'sc',title:'Offline regression',quiz:{exam:'all',count:1,format:'self'},decisionSource:'offline'});
+      },offlineCard);
+      await page.locator('#btnQuizReveal').click();
+      await page.locator('#btnQuizWrong').click();
+      await page.locator('#btnQuizNext').click();
+      assert.equal(await page.evaluate(()=>loadPendingResults().length),1);
+      assert.deepEqual((await storage.load()).quizProgress,storedBeforeOffline.quizProgress);
+      await page.locator('#btnCompRetry').click();
+      await page.locator('#btnQuizReveal').click();
+      await page.locator('#btnQuizRight').click();
+      await page.locator('#btnQuizNext').click();
+      assert.equal(await page.evaluate(()=>loadPendingResults().length),1);
+      await page.evaluate(async()=>{STATE.offline=false;await flushPendingQuizResults();});
+      assert.equal(await page.evaluate(()=>loadPendingResults().length),0);
+      assert.equal((await storage.load()).quizProgress[offlineCard.id].wrong,1);
       // Actual official question and original pixels, at both screen sizes.
       const q=NW_QUESTIONS.find(q=>q.kind==='choice');
       await page.evaluate(q=>startNetworkQuestion(q),q);
@@ -71,8 +92,8 @@ const {NW_QUESTIONS}=require('./lib/content/nw-exams');
       await page.locator('#nwExercise').getByRole('button',{name:'幅に合わせる',exact:true}).click();
       assert.equal(await page.locator('#nwExercise .nw-original').evaluate(img=>img.style.width),'100%');
       const wrongChoice=['ア','イ','ウ','エ'].find(c=>c!==q.correctChoice);
-      await page.locator('#nwExercise .nw-choice').getByRole('button',{name:wrongChoice,exact:true}).click();
-      await page.locator('#nwExercise').getByRole('button',{name:'回答を採点する',exact:true}).click();
+      await page.keyboard.press(String(['ア','イ','ウ','エ'].indexOf(wrongChoice)+1));
+      await page.keyboard.press('Enter');
       assert.match(await page.locator('.nw-feedback').textContent(),new RegExp('正解: '+q.correctChoice));
       assert.equal(await page.locator('.nw-feedback').evaluate(el=>document.activeElement===el),true);
       await page.screenshot({path:'ui-evidence/feedback-'+width+'.png',fullPage:true});
