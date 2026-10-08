@@ -8,6 +8,8 @@ A learning web application where Jev selects one task based on available time an
 
 Choose available time and mood, receive one quest, answer and self-assess, then let Jev judge understanding and whether review is needed.
 
+Answers stay visible until you choose Next. After a session, retry only the mistakes as unsaved practice; your first result and scheduled review remain intact. Network originals have in-page zoom, scrolling and page controls, and morning answers show the official key before and after saving. See the [memorization UI notes](docs/memorization-ui.md) for scope, limitations and validation.
+
 ## Runtime choices
 
 | Mode | Runtime | Authentication | Storage |
@@ -34,3 +36,9 @@ The [Japanese guide](README.ja.md) retains the complete original setup instructi
 ## Network Specialist past exams
 
 The 2021–2025 spring catalog includes 275 automatically marked morning questions and 25 complete afternoon questions with per-subquestion answers and self-assessment. Original IPA text/choices/diagrams are displayed as attributed scans. Existing materials, history and reading CI are preserved. See [implementation and sources](docs/network-exam-learning.md) and [content QA](docs/nw-content-qa.md).
+
+## Memorization UI validation and limits
+
+[PR #13](https://github.com/moruku36/jev-learning-quest/pull/13) passed the existing four test scripts, syntax checks, and real Chromium learning flows at 375px and 1280px, including failed saves, offline queues and practice preserving history. [PR #15](https://github.com/moruku36/jev-learning-quest/pull/15) also fixes partial-session save failures: the visible question, current index and unsaved answers stay aligned, so you can resume or retry saving. Practice screens and exit confirmations clearly say that results are not saved. The [final implementation CI and screen evidence](https://github.com/moruku36/jev-learning-quest/actions/runs/37780087851) cover these recovery paths at both screen sizes. There is no configured build or lint command.
+
+Explanations absent from the source materials are labelled as unavailable; answers are not guessed. AP/SC practice choices are generated from other card answers rather than IPA's original choices. Cloud authentication, RLS, credentials and storage formats are unchanged. The implementation merge commit `3e054b0521889a58db45e0ae94d1c8cb3a546ab8` has a successful [Vercel deployment check](https://vercel.com/moruku36s-projects/todays-learning-quest/AFC7zSgu3WVzQQBWSPVepkF9mzRn). Production alias/asset verification remains incomplete: the connected Vercel account could not inspect the project, and the public assets could not be retrieved in this environment.
