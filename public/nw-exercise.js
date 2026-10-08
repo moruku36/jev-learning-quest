@@ -1,9 +1,41 @@
+// Keep the official pixels; zoom inside the page without opening another tab.
+function createNetworkImageViewer(images, pages, label) {
+  const viewer=document.createElement('section');viewer.className='nw-viewer';
+  const toolbar=document.createElement('div');toolbar.className='nw-pager';
+  const viewport=document.createElement('div');viewport.className='nw-image-box';viewport.tabIndex=0;
+  viewport.setAttribute('aria-label',label+'。拡大時は左右上下にスクロールできます');
+  const img=document.createElement('img');img.className='nw-original';viewport.append(img);
+  let page=0,scale=100;
+  function button(text,action) {
+    const b=document.createElement('button');b.type='button';b.className='btn btn-outline';b.textContent=text;b.onclick=action;toolbar.append(b);return b;
+  }
+  const previous=button('前のページ',()=>{page--;show();});
+  const counter=document.createElement('span');counter.setAttribute('role','status');toolbar.append(counter);
+  const next=button('次のページ',()=>{page++;show();});
+  const smaller=button('縮小 −',()=>{scale=Math.max(100,scale-50);show(false);});
+  const larger=button('拡大 ＋',()=>{scale=Math.min(300,scale+50);show(false);});
+  button('幅に合わせる',()=>{scale=100;show(false);viewport.scrollLeft=viewport.scrollTop=0;});
+  const original=document.createElement('a');original.className='run-link';original.target='_blank';original.rel='noopener noreferrer';original.textContent='原寸で開く ↗';toolbar.append(original);
+  function show(reset=true) {
+    img.src=images[page];img.alt=label+'（PDF '+pages[page]+'ページ）';
+    img.style.width=scale+'%';original.href=images[page];
+    counter.textContent=(page+1)+' / '+images.length+' · '+scale+'%';
+    previous.disabled=page===0;next.disabled=page===images.length-1;
+    previous.hidden=next.hidden=images.length<2;smaller.disabled=scale===100;larger.disabled=scale===300;
+    if(reset)viewport.scrollLeft=viewport.scrollTop=0;
+  }
+  const fallback=document.createElement('p');fallback.className='field-hint';fallback.hidden=true;
+  fallback.textContent='画像を読み込めませんでした。「原寸で開く」か上のIPA問題冊子リンクで確認してください。';
+  img.onerror=()=>{fallback.hidden=false;};
+  img.onload=()=>{fallback.hidden=true;};
+  viewer.append(toolbar,viewport,fallback);show();return viewer;
+}
 // Official scanned content, morning key grading and afternoon self-assessment.
 let nwMountGeneration=0;
 async function mountNetworkExercise(quest) {
   const generation=++nwMountGeneration;
   const host=document.getElementById('nwExercise');
-  host.replaceChildren(); host.hidden=quest.category!=='nw';
+  host.onkeydown=null;host.replaceChildren(); host.hidden=quest.category!=='nw';
   const isNW=quest.category==='nw';
   STATE.nwQuestion=null;
   document.getElementById('inputAnswer').closest('.run-input-group').hidden=isNW;
@@ -25,42 +57,39 @@ async function mountNetworkExercise(quest) {
   document.getElementById('runLink').href=`${q.questionPdf}#page=${q.pdfPage}`;
   host.replaceChildren();
   const source=document.createElement('a');source.className='run-link';source.href=q.sourcePage;source.target='_blank';source.rel='noopener';source.textContent='この問題の出典・収録ページ・利用条件 ↗';host.append(source);
-  const imageBox=document.createElement('div');imageBox.className='nw-image-box';host.append(imageBox);
-  let page=0;
-  const pager=document.createElement('div');pager.className='nw-pager';
-  const previous=document.createElement('button'),next=document.createElement('button'),counter=document.createElement('span');
-  previous.className=next.className='btn btn-outline';previous.textContent='前のページ';next.textContent='次のページ';pager.append(previous,counter,next);if(q.images.length>1)host.append(pager);
-  function showPage(){
-    imageBox.replaceChildren();const link=document.createElement('a');link.href=q.images[page];link.target='_blank';link.rel='noopener';link.title='原本画像を拡大して開く';
-    const img=document.createElement('img');img.src=q.images[page];img.alt=`${q.sourceLabel} 本文・選択肢・図表（PDF ${q.pdfPages[page]}ページ）`;img.className='nw-original';link.append(img);imageBox.append(link);
-    counter.textContent=`${page+1} / ${q.images.length}（PDF ${q.pdfPages[page]}ページ）`;previous.disabled=page===0;next.disabled=page===q.images.length-1;
-  }
-  previous.onclick=()=>{page--;showPage();};next.onclick=()=>{page++;showPage();};showPage();
-  const hint=document.createElement('p');hint.className='field-hint';hint.textContent='本文はIPA原本の画像です。画像を押すと拡大できます。';host.append(hint);
+  const heading=document.createElement('h3');heading.textContent='設問 · IPA原本';host.append(heading);
+  host.append(createNetworkImageViewer(q.images,q.pdfPages,q.sourceLabel+' 本文・選択肢・図表'));
+  const hint=document.createElement('p');hint.className='field-hint';hint.textContent='拡大・縮小して読み、拡大中は画像をスクロールできます。原本の本文・図表をそのまま表示しています。';host.append(hint);
   if(q.kind==='choice'){
-    const choices=document.createElement('div');choices.className='pill-group nw-choice';
+    const answerHeading=document.createElement('h3');answerHeading.textContent='回答';host.append(answerHeading);
+    const choices=document.createElement('div');choices.className='pill-group nw-choice';choices.setAttribute('role','group');choices.setAttribute('aria-label','回答の選択肢。キーボード1〜4でア〜エ');
     for(const label of ['ア','イ','ウ','エ']){
-      const button=document.createElement('button');button.className='pill';button.textContent=label;button.setAttribute('aria-pressed','false');
+      const button=document.createElement('button');button.type='button';button.className='pill';button.textContent=label;button.setAttribute('aria-pressed','false');
       button.onclick=()=>{STATE.nwChoice=label;for(const b of choices.children){b.classList.toggle('active',b===button);b.setAttribute('aria-pressed',String(b===button));}};choices.append(button);
     }
-    const grade=document.createElement('button');grade.className='btn btn-primary mt-8';grade.textContent='回答を採点する';
-    const result=document.createElement('p');result.setAttribute('role','status');
+    const grade=document.createElement('button');grade.type='button';grade.className='btn btn-primary mt-8';grade.textContent='回答を採点する';
+    const result=document.createElement('div');result.className='nw-feedback';result.hidden=true;result.tabIndex=-1;result.setAttribute('role','status');
     grade.onclick=()=>{
       if(!STATE.nwChoice){showToast('ア・イ・ウ・エから選んでください','warn');return;}
       STATE.nwGraded=true;setEvalState(STATE.nwChoice===q.correctChoice);grade.disabled=true;
       for(const b of choices.children)b.disabled=true;
-      result.textContent=`${STATE.isCorrect?'正解':'不正解'} · 公式正解: ${q.correctChoice}`;
+      result.hidden=false;
+      result.textContent=`${STATE.isCorrect?'正解':'不正解'} · あなたの回答: ${STATE.nwChoice} · 正解: ${q.correctChoice}（IPA公式）`;
+      const explanation=document.createElement('p');explanation.className='field-hint';explanation.textContent='解説: この教材には公式正解表を収録しています。解説本文は未収録です。正解と原本を照らし合わせて覚え直してください。';result.append(explanation);
+      result.focus({preventScroll:true});result.scrollIntoView({block:'nearest',behavior:'smooth'});
       const a=document.createElement('a');a.className='run-link';a.href=`${q.answerPdf}#page=1`;a.target='_blank';a.rel='noopener';a.textContent=' 公式正解表を確認 ↗';result.append(a);
     };
     host.append(choices,grade,result);
+    host.onkeydown=e=>{
+      if(STATE.nwGraded || e.repeat || e.ctrlKey || e.metaKey || e.altKey || !/^[1-4]$/.test(e.key))return;
+      e.preventDefault();choices.children[Number(e.key)-1].click();grade.focus({preventScroll:true});
+    };
+    choices.children[0].focus({preventScroll:true});
   }else{
     const note=document.createElement('p');note.textContent='設問の本文・字数制限は上の原本画像にあります。各欄に回答し、公式解答例に照らして採点してください。';host.append(note);
-    const reveal=document.createElement('button');reveal.className='btn btn-outline';reveal.textContent='公式解答例を表示する';
+    const reveal=document.createElement('button');reveal.type='button';reveal.className='btn btn-outline';reveal.textContent='公式解答例を表示する';
     const official=document.createElement('div');official.hidden=true;
-    for(const [i,url]of q.answerImages.entries()){
-      const img=document.createElement('img');img.src=url;img.loading='lazy';img.alt=`${q.sourceLabel} 公式解答例 PDF ${q.answerPages[i]}ページ`;img.className='nw-original';
-      const zoom=document.createElement('a');zoom.href=url;zoom.target='_blank';zoom.rel='noopener';zoom.title='公式解答例の原本画像を拡大して開く';zoom.append(img);official.append(zoom);
-    }
+    official.append(createNetworkImageViewer(q.answerImages,q.answerPages,q.sourceLabel+' 公式解答例'));
     reveal.onclick=()=>{official.hidden=!official.hidden;reveal.textContent=official.hidden?'公式解答例を表示する':'公式解答例を閉じる';};host.append(reveal,official);
     for(const section of q.sections){
       const group=document.createElement('fieldset');group.className='nw-section';const legend=document.createElement('legend');legend.textContent=`設問${section.no}`;group.append(legend);

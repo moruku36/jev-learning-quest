@@ -248,6 +248,7 @@
               <span class="tag tag-type" id="quizSourceTag">-</span>
               <span class="quiz-topic" id="quizTopic"></span>
             </div>
+            <span class="box-label">設問</span>
             <p class="quiz-question" id="quizQuestion">-</p>
             <div class="quiz-confidence" id="quizConfidence" role="group" aria-label="答える前の自信度">
               <span class="confidence-label">答える前の自信度</span>
@@ -257,9 +258,12 @@
             </div>
             <button class="btn btn-secondary btn-lg quiz-reveal" id="btnQuizReveal" type="button">答えを見る <kbd>Space</kbd></button>
             <div class="quiz-choices" id="quizChoices" hidden></div>
-            <div class="quiz-answer" id="quizAnswerBox" hidden>
+            <div class="quiz-answer" id="quizAnswerBox" role="status" aria-live="polite" hidden>
+              <p id="quizSelectedAnswer" hidden></p>
               <span class="box-label" id="quizAnswerLabel">💡 答え</span>
               <p class="quiz-answer-text" id="quizAnswer"></p>
+              <span class="box-label">解説・根拠</span>
+              <p id="quizExplanation" class="field-hint"></p>
               <div class="quiz-mistake-check" id="quizMistakeCheck" hidden>
                 <label class="input-label" for="quizMistakeReason">間違えた理由（任意）</label>
                 <select id="quizMistakeReason" class="simple-input">
@@ -311,7 +315,7 @@
             <div class="box-content" id="compAnswerNotesText"></div>
           </div>
           <div class="answer-notes" id="compWrongBox" hidden>
-            <span class="box-label">🔁 間違えた問題（明日もう一度出題されます）</span>
+            <span class="box-label">🔁 間違えた問題（今すぐ再挑戦・明日も復習）</span>
             <ul class="wrong-list" id="compWrongList"></ul>
           </div>
           <div class="answer-notes" id="compKeywordBox" hidden>
@@ -325,6 +329,7 @@
             <p class="field-hint" id="claudeReviewHint"></p>
             <div class="box-content review-result" id="compReviewResult" hidden></div>
           </div>
+          <button class="btn btn-secondary" id="btnCompRetry" type="button" hidden>間違えた問題だけもう一度</button>
           <button class="btn btn-primary" id="btnCompNext">次のクエストへ</button>
         </div>
 
