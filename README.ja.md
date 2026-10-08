@@ -327,6 +327,6 @@ npm test
 
 回答・自己採点後は正解を表示し、「次へ」を押すまで進みません。その間に間違えた理由を選べます。完了後はその回の誤答だけを、保存しない練習として再挑戦できます。最初の誤答履歴と翌日の復習予定は維持します。NW午前は回答・公式正解を採点時と保存後に表示し、原本画像は画面内で拡大・縮小・スクロール・ページ切替できます。短い学習枠に長いNW復習を推薦しない条件も修正しました。
 
-[PR #13](https://github.com/moruku36/jev-learning-quest/pull/13)では既存4本のテスト、構文確認、実Chromiumの375px/1280px学習フローが成功しました。保存失敗からの再送、オフライン結果の送信、再挑戦時の履歴維持、画像読み込み失敗も確認しています。[CI・画面証跡](https://github.com/moruku36/jev-learning-quest/actions/runs/37778588830)と[改善範囲・制限](docs/memorization-ui.md)を参照してください。build/lintコマンドは未設定です。
+[PR #13](https://github.com/moruku36/jev-learning-quest/pull/13)では既存4本のテスト、構文確認、実Chromiumの375px/1280px学習フローが成功しました。保存失敗からの再送、オフライン結果の送信、再挑戦時の履歴維持、画像読み込み失敗も確認しています。[PR #15](https://github.com/moruku36/jev-learning-quest/pull/15)では、途中中断の保存失敗時も表示中の問題・問題番号・未保存回答を維持し、回答再開や部分結果の再送ができるよう修正しました。練習の終了ボタン・中断確認も「保存しません」と実際の動作に合わせています。これらの復帰ケースも含む[最終実装CI・画面証跡](https://github.com/moruku36/jev-learning-quest/actions/runs/37780087851)と[改善範囲・制限](docs/memorization-ui.md)を参照してください。build/lintコマンドは未設定です。
 
-既存の間隔反復、履歴形式、認証・RLS・資格情報は変更していません。merge commitのVercelチェックは成功しましたが、接続中のVercelアカウントが対象プロジェクトを確認できず、本番URL・静的ファイルとの照合は未完了です。
+既存の間隔反復、履歴形式、認証・RLS・資格情報は変更していません。実装merge commit `3e054b0521889a58db45e0ae94d1c8cb3a546ab8` の[Vercelデプロイチェック](https://vercel.com/moruku36s-projects/todays-learning-quest/AFC7zSgu3WVzQQBWSPVepkF9mzRn)は成功しました。ただし、接続中のVercelアカウントが対象プロジェクトを確認できず、この環境では公開静的ファイルも取得できなかったため、本番alias・静的ファイルとの照合は未完了です。
