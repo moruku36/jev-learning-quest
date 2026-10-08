@@ -67,6 +67,11 @@ const { generateQuestCandidates } = require('./lib/quest-engine');
   assert(candidates.some(c=>c.itemId.includes('pm1')));
   assert(generateQuestCandidates({store:{items:[],history:[]},category:'nw',minutes:10,goal:'balance'}).every(c=>c.recommendedMinutes<=10));
 
+  const longQuestion=written.find(q=>q.minutes===120);
+  const shortCandidates=generateQuestCandidates({store:{items:[],history:[{id:'long-due',itemId:longQuestion.itemId,category:'nw',isCorrect:false,nextReviewDate:'2020-01-01'}]},category:'nw',minutes:5,goal:'weakness'});
+  assert(!shortCandidates.some(c=>c.historyId==='long-due'),'Do not recommend a 120-minute retry in a 5-minute session');
+  assert(shortCandidates.every(c=>c.recommendedMinutes<=5));
+  assert(generateQuestCandidates({store:{items:[],history:[{id:'long-due',itemId:longQuestion.itemId,category:'nw',isCorrect:false,nextReviewDate:'2020-01-01'}]},category:'nw',minutes:120,goal:'weakness'}).some(c=>c.historyId==='long-due'));
   const dataDir=fs.mkdtempSync(path.join(os.tmpdir(),'nw-exam-test-'));
   const storage=createFileStorage(dataDir);
   const seed={items:[{id:'existing-item',type:'catchup',title:'Preserve me',category:'ai',notes:'existing'}],

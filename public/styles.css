@@ -2195,3 +2195,16 @@ kbd {
 .nw-history pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 
 .run-eval-section:has(.eval-row[hidden]):has(.mistake-drawer[hidden]) { display:none; }
+
+/* Memorization: visible answers and an in-page, keyboard-scrollable original. */
+.nw-viewer { min-width:0; margin:16px 0; }
+.nw-viewer .nw-image-box { overflow:auto; max-height:70vh; border:1px solid var(--border); background:#fff; margin-top:8px; }
+.nw-viewer .nw-original { max-width:none; margin:0; border:0; }
+.nw-viewer .nw-pager { justify-content:flex-start; }
+.nw-feedback { margin:16px 0; padding:16px; border:2px solid var(--accent-green); border-radius:12px; font-size:1.1rem; font-weight:700; }
+.nw-feedback .field-hint { font-weight:400; }
+#quizSelectedAnswer { margin-bottom:12px; overflow-wrap:anywhere; }
+#quizExplanation { margin-bottom:12px; }
+#btnCompRetry { margin:8px 8px 8px 0; }
+.nw-viewer button { min-height:44px; }
+.nw-image-box:focus-visible, .nw-feedback:focus-visible { outline:3px solid var(--accent-blue); outline-offset:3px; }
