@@ -263,16 +263,6 @@
               <p class="quiz-answer-text" id="quizAnswer"></p>
               <span class="box-label">解説・根拠</span>
               <p id="quizExplanation" class="field-hint"></p>
-              <div class="quiz-mistake-check" id="quizMistakeCheck" hidden>
-                <label class="input-label" for="quizMistakeReason">間違えた理由（任意）</label>
-                <select id="quizMistakeReason" class="simple-input">
-                  <option value="">選択してください</option>
-                  <option value="読み落とし">読み落とし</option>
-                  <option value="知識不足">知識不足</option>
-                  <option value="設問要求とのずれ">設問要求とのずれ</option>
-                  <option value="時間不足">時間不足</option>
-                </select>
-              </div>
               <div class="quiz-answer-links">
                 <a class="run-link" id="quizSourceLink" href="#" target="_blank" rel="noopener noreferrer">元の過去問と解説を見る ↗</a>
                 <button class="link-btn" id="btnQuizReport" type="button">⚠ この問題おかしい？</button>
@@ -288,6 +278,16 @@
           <div class="quiz-judge" id="quizJudge" hidden>
             <button class="btn btn-outline btn-lg" id="btnQuizWrong" type="button">❌ まだ <kbd>N</kbd></button>
             <button class="btn btn-primary btn-lg" id="btnQuizRight" type="button">⭕ 覚えてた <kbd>Y</kbd></button>
+          </div>
+          <div class="quiz-mistake-check" id="quizMistakeCheck" hidden>
+            <label class="input-label" for="quizMistakeReason">間違えた理由（任意）</label>
+            <select id="quizMistakeReason" class="simple-input">
+              <option value="">選択してください</option>
+              <option value="読み落とし">読み落とし</option>
+              <option value="知識不足">知識不足</option>
+              <option value="設問要求とのずれ">設問要求とのずれ</option>
+              <option value="時間不足">時間不足</option>
+            </select>
           </div>
           <div class="quiz-next" id="quizNext" hidden>
             <button class="btn btn-primary btn-lg" id="btnQuizNext" type="button">次へ <kbd>Enter</kbd></button>

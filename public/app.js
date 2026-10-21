@@ -1273,6 +1273,11 @@ function renderQuizCard() {
   setHidden('quizAnswerBox', true);
   setHidden('quizJudge', true);
   setHidden('quizNext', true);
+  for (const id of ['btnQuizRight', 'btnQuizWrong']) {
+    const b = document.getElementById(id);
+    b.disabled = false; b.classList.remove('chosen'); b.removeAttribute('aria-pressed');
+  }
+  STATE.quiz.nextArmedAt = 0;
 
   // 4択形式の選択肢は思い出すためのヒント。選んでも採点せず、答えを見て自己判定する
   const choicesBox = document.getElementById('quizChoices');
@@ -1326,9 +1331,11 @@ function recordQuizAnswer(correct) {
   return true;
 }
 
+const QUIZ_NEXT_DELAY_MS = 600;
 function goNextQuizCard() {
   const quiz = STATE.quiz;
   if (!quiz || quiz.saving || !quiz.answers.some(a=>a.id===quiz.cards[quiz.index]?.id)) return;
+  if (quiz.nextArmedAt && Date.now() < quiz.nextArmedAt) return; // just judged: ignore stray repeat input
   quiz.index++;
   if (quiz.index < quiz.cards.length) renderQuizCard();
   else finishQuiz();
@@ -1339,8 +1346,13 @@ function judgeQuizCard(correct) {
   if (!quiz || quiz.saving) return;
   if(document.getElementById('quizAnswerBox').hidden || !recordQuizAnswer(correct))return;
   document.getElementById('quizAnswerLabel').textContent=correct?'覚えていた · 正解':'覚え直す · 正解';
-  setHidden('quizJudge',true);setHidden('quizNext',false);
-  document.getElementById('btnQuizNext').focus({preventScroll:true});
+  // The judge row stays in place (disabled, choice marked) and "next" appears on its own row
+  // below, so a double-click or held key on the judge button cannot land on "next".
+  for(const [id,ok] of [['btnQuizRight',true],['btnQuizWrong',false]]){
+    const b=document.getElementById(id);b.disabled=true;b.classList.toggle('chosen',ok===correct);b.setAttribute('aria-pressed',String(ok===correct));
+  }
+  quiz.nextArmedAt=Date.now()+QUIZ_NEXT_DELAY_MS;
+  setHidden('quizNext',false);
 }
 
 async function sendQuizReport() {

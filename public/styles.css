@@ -2194,3 +2194,7 @@ kbd {
 #btnCompRetry { margin:8px 8px 8px 0; }
 .nw-viewer button { min-height:44px; }
 .nw-image-box:focus-visible, .nw-feedback:focus-visible { outline:3px solid var(--accent-blue); outline-offset:3px; }
+
+/* Judged card: keep the judge row in place; "next" sits below it. */
+.quiz-judge .btn.chosen { outline:3px solid var(--accent-blue); outline-offset:2px; }
+.quiz-judge .btn:disabled:not(.chosen) { opacity:.45; }
