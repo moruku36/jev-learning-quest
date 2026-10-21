@@ -2198,3 +2198,11 @@ kbd {
 /* Judged card: keep the judge row in place; "next" sits below it. */
 .quiz-judge .btn.chosen { outline:3px solid var(--accent-blue); outline-offset:2px; }
 .quiz-judge .btn:disabled:not(.chosen) { opacity:.45; }
+
+/* Small screens: drop the keyboard hints so the judge labels stay on one line without shrinking the buttons. */
+@media (max-width: 480px) {
+  .quiz-judge { gap: 8px; }
+  .quiz-judge .btn { white-space: nowrap; padding-left: 8px; padding-right: 8px; }
+  .quiz-judge .btn kbd { display: none; }
+}
+.quiz-next .btn:disabled { opacity: .6; cursor: progress; }

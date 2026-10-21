@@ -48,15 +48,20 @@ const {QUIZ_CARDS}=require('./lib/content');
       const judgeBox=await page.locator('#btnQuizWrong').boundingBox(),nextBox=await page.locator('#btnQuizNext').boundingBox();
       assert.equal(Math.round(judgeBox.y),Math.round(judgeBefore.y),'Judging must not shift the judge row (no misclick on what moves in)');
       assert(nextBox.y>=judgeBox.y+judgeBox.height-1,'next is below the judge row, not on top of it');
-      await page.locator('#btnQuizNext').click();await page.keyboard.press('Enter');
-      assert.equal(await page.evaluate(()=>STATE.quiz.index),0,'Stray click/Enter right after judging does not skip the card');
+      // The exact 600ms boundary is covered on a controlled clock in test_quiz_guard.js; here Next is
+      // simply disabled until it is actionable, and a click on it waits for that.
+      await page.waitForFunction(()=>!document.getElementById('btnQuizNext').disabled);
       assert.equal(await page.evaluate(()=>STATE.quiz.answers.length),1);
       assert.equal(await page.evaluate(()=>STATE.quiz.answers[0].correct),false);
       await page.locator('#quizMistakeReason').selectOption('知識不足');
-      await page.waitForTimeout(650);await page.locator('#btnQuizNext').click();
+      await page.locator('#btnQuizNext').click(); // waits until Next is enabled
       await page.locator('#btnQuizReveal').click();
-      await page.locator('#btnQuizRight').click();
-      await page.waitForTimeout(650);await page.locator('#btnQuizNext').click();
+      const stray=await page.evaluate(()=>{ // one synchronous task: judge, then stray click/Enter on Next
+        judgeQuizCard(true);const b=document.getElementById('btnQuizNext'),r={disabled:b.disabled,label:document.getElementById('quizNextLabel').textContent};
+        b.click();document.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));r.index=STATE.quiz.index;return r;
+      });
+      assert.equal(stray.disabled,true);assert.match(stray.label,/反映中/);assert.equal(stray.index,1,'Stray click/Enter right after judging does not skip the card');
+      await page.locator('#btnQuizNext').click(); // waits until Next is enabled
       await page.waitForFunction(()=>STATE.quiz===null);
       const before=await storage.load();
       const wrong=Object.entries(before.quizProgress).find(([,p])=>p.wrong===1);
@@ -65,7 +70,7 @@ const {QUIZ_CARDS}=require('./lib/content');
       assert.equal(await page.evaluate(()=>STATE.quiz.cards.length),1);
       await page.locator('#btnQuizReveal').click();
       await page.locator('#btnQuizRight').click();
-      await page.waitForTimeout(650);await page.locator('#btnQuizNext').click();
+      await page.locator('#btnQuizNext').click(); // waits until Next is enabled
       await page.waitForFunction(()=>STATE.quiz===null);
       assert.equal(quizSaves,1,'Practice does not submit or reschedule the first mistake');
       assert.deepEqual((await storage.load()).quizProgress[wrong[0]],wrong[1]);
@@ -79,10 +84,10 @@ const {QUIZ_CARDS}=require('./lib/content');
       assert.equal(await page.evaluate(()=>STATE.quiz.answers.length),1);
       await page.locator('#quizMistakeReason').selectOption('読み落とし');
       await page.route('**/api/quiz/answers',route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({success:false,error:'test save failure'})}),{times:1});
-      await page.waitForTimeout(650);await page.locator('#btnQuizNext').click();
+      await page.locator('#btnQuizNext').click(); // waits until Next is enabled
       await page.waitForFunction(()=>STATE.quiz && !STATE.quiz.saving && STATE.quiz.index===0);
       assert.equal(await page.locator('#quizAnswerBox').isVisible(),true);
-      await page.waitForTimeout(650);await page.locator('#btnQuizNext').click();
+      await page.locator('#btnQuizNext').click(); // waits until Next is enabled
       await page.waitForFunction(()=>STATE.quiz===null);
       // Offline first answer is queued once; practice does not queue a second result.
       const offlineCard=QUIZ_CARDS.find(c=>!before.quizProgress[c.id]);
@@ -93,13 +98,13 @@ const {QUIZ_CARDS}=require('./lib/content');
       },offlineCard);
       await page.locator('#btnQuizReveal').click();
       await page.locator('#btnQuizWrong').click();
-      await page.waitForTimeout(650);await page.locator('#btnQuizNext').click();
+      await page.locator('#btnQuizNext').click(); // waits until Next is enabled
       assert.equal(await page.evaluate(()=>loadPendingResults().length),1);
       assert.deepEqual((await storage.load()).quizProgress,storedBeforeOffline.quizProgress);
       await page.locator('#btnCompRetry').click();
       await page.locator('#btnQuizReveal').click();
       await page.locator('#btnQuizRight').click();
-      await page.waitForTimeout(650);await page.locator('#btnQuizNext').click();
+      await page.locator('#btnQuizNext').click(); // waits until Next is enabled
       assert.equal(await page.evaluate(()=>loadPendingResults().length),1);
       await page.evaluate(async()=>{STATE.offline=false;await flushPendingQuizResults();});
       assert.equal(await page.evaluate(()=>loadPendingResults().length),0);
@@ -111,7 +116,7 @@ const {QUIZ_CARDS}=require('./lib/content');
       const partialBefore=await storage.load();
       await page.locator('#btnQuizReveal').click();
       await page.locator('#btnQuizRight').click();
-      await page.waitForTimeout(650);await page.locator('#btnQuizNext').click();
+      await page.locator('#btnQuizNext').click(); // waits until Next is enabled
       const secondQuestion=await page.locator('#quizQuestion').textContent();
       await page.route('**/api/quiz/answers',route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({success:false,error:'partial save failure'})}),{times:1});
       page.once('dialog',dialog=>dialog.accept());
@@ -189,6 +194,45 @@ const {QUIZ_CARDS}=require('./lib/content');
       assert.match(await page.locator('#nwExercise .nw-viewer').first().textContent(),/画像を読み込めませんでした/);
       assert(await page.locator('#nwExercise .nw-viewer').first().locator('p.field-hint').isVisible());
       assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'No page-wide overflow');
+      // Real keys: Space/Y/N, held (repeat:true) keys, and Enter on a focused link must not skip or double-judge.
+      await page.evaluate(()=>{STATE.quiz=null;document.getElementById('quizRunCard').hidden=true;document.getElementById('completionBanner').hidden=true;});
+      await page.evaluate(()=>startQuizRun({type:'一問一答',category:'sc',title:'Keys regression',quiz:{exam:'sc',count:2,format:'self'},decisionSource:'manual'}));
+      const held=keys=>page.evaluate(keys=>{for(const k of keys)document.dispatchEvent(new KeyboardEvent('keydown',{key:k,repeat:true,bubbles:true}));},keys);
+      await held([' ','Enter','y','n']);
+      assert.equal(await page.locator('#quizAnswerBox').isVisible(),false,'Held keys do not reveal');
+      await page.keyboard.press('Space');
+      assert.equal(await page.locator('#quizAnswerBox').isVisible(),true);
+      await held([' ','y','n','ArrowRight','ArrowLeft']);
+      assert.equal(await page.evaluate(()=>STATE.quiz.answers.length),0,'Held keys do not judge');
+      await page.keyboard.press('n');await page.keyboard.press('y');await page.keyboard.press('n');
+      assert.deepEqual(await page.evaluate(()=>STATE.quiz.answers.map(a=>a.correct)),[false],'Mashing keeps the first judgement');
+      await held(['Enter','y','n']);
+      await page.waitForFunction(()=>!document.getElementById('btnQuizNext').disabled);
+      await held(['Enter']);
+      assert.equal(await page.evaluate(()=>STATE.quiz.index),0,'Held Enter never advances');
+      await page.locator('#quizSourceLink').dispatchEvent('keydown',{key:'Enter',bubbles:true});
+      assert.equal(await page.evaluate(()=>STATE.quiz.index),0,'Enter on a focused link does not skip the card');
+      await page.keyboard.press('Enter');
+      assert.equal(await page.evaluate(()=>STATE.quiz.index),1);
+      await page.keyboard.press('Space');await page.keyboard.press('y');
+      assert.deepEqual(await page.evaluate(()=>STATE.quiz.answers.map(a=>a.correct)),[false,true]);
+      // Quitting while a save is in flight keeps the quiz; the failed save is retried and stored once.
+      const savesBefore=quizSaves;let slowRelease;
+      await page.route('**/api/quiz/answers',async route=>{await new Promise(r=>{slowRelease=r;});route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({success:false,error:'slow failure'})});},{times:1});
+      let quitDialogs=0;page.on('dialog',d=>{quitDialogs++;d.dismiss();});
+      await page.locator('#btnQuizNext').click();
+      await page.waitForFunction(()=>STATE.quiz?.saving===true);
+      assert.equal(await page.locator('#btnQuizNext').isDisabled(),true);
+      assert.match(await page.locator('#quizNextLabel').textContent(),/保存中/);
+      await page.locator('#btnQuizQuit').click();
+      assert.equal(quitDialogs,0,'No dialog while saving');
+      assert.equal(await page.evaluate(()=>STATE.quiz!==null && !document.getElementById('quizRunCard').hidden),true,'Quiz survives quit during save');
+      slowRelease();
+      await page.waitForFunction(()=>STATE.quiz && !STATE.quiz.saving);
+      assert.deepEqual(await page.evaluate(()=>STATE.quiz.answers.map(a=>a.correct)),[false,true],'Unsaved answers kept after the failure');
+      await page.locator('#btnQuizNext').click();
+      await page.waitForFunction(()=>STATE.quiz===null);
+      assert.equal(quizSaves-savesBefore,2,'One failed attempt plus exactly one retry');
       await page.close();
       console.log('Chromium learning flow passed at '+width+'px');
     }
