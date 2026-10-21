@@ -37,7 +37,9 @@ const {QUIZ_CARDS}=require('./lib/content');
       assert.equal(await page.locator('#quizAnswer').textContent(),await page.evaluate(()=>STATE.quiz.cards[0].answer));
       assert.equal(await page.locator('#quizChoices .quiz-choice.correct').count(),1);
       assert.equal(await page.evaluate(()=>STATE.quiz.answers.length),0,'Revealing the answer is not a result');
-      const judgeBefore=await page.locator('#btnQuizWrong').boundingBox();
+      // Document-relative positions: boundingBox() is viewport-relative and click() scrolls the page.
+      const docRect=id=>page.evaluate(id=>{const r=document.getElementById(id).getBoundingClientRect();return {top:Math.round(r.top+scrollY),bottom:Math.round(r.bottom+scrollY)};},id);
+      const judgeBefore=await docRect('btnQuizWrong');
       await page.locator('#btnQuizWrong').click();
       assert.equal(await page.evaluate(()=>STATE.quiz.index),0);
       assert.match(await page.locator('#quizAnswerLabel').textContent(),/正解/);
@@ -45,9 +47,9 @@ const {QUIZ_CARDS}=require('./lib/content');
       // The judge row stays put and disabled; "next" is a separate row and ignores input right after judging.
       assert.equal(await page.locator('#btnQuizWrong').isDisabled(),true);
       assert.equal(await page.locator('#quizJudge').isVisible(),true);
-      const judgeBox=await page.locator('#btnQuizWrong').boundingBox(),nextBox=await page.locator('#btnQuizNext').boundingBox();
-      assert.equal(Math.round(judgeBox.y),Math.round(judgeBefore.y),'Judging must not shift the judge row (no misclick on what moves in)');
-      assert(nextBox.y>=judgeBox.y+judgeBox.height-1,'next is below the judge row, not on top of it');
+      const judgeBox=await docRect('btnQuizWrong'),nextBox=await docRect('btnQuizNext');
+      assert.equal(judgeBox.top,judgeBefore.top,'Judging must not shift the judge row (no misclick on what moves in)');
+      assert(nextBox.top>=judgeBox.bottom-1,'next is below the judge row, not on top of it');
       // The exact 600ms boundary is covered on a controlled clock in test_quiz_guard.js; here Next is
       // simply disabled until it is actionable, and a click on it waits for that.
       await page.waitForFunction(()=>!document.getElementById('btnQuizNext').disabled);
