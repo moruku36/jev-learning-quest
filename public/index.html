@@ -257,9 +257,8 @@
               <button class="btn btn-outline btn-sm confidence-choice" data-confidence="low" type="button" aria-pressed="false">自信なし</button>
             </div>
             <button class="btn btn-secondary btn-lg quiz-reveal" id="btnQuizReveal" type="button">答えを見る <kbd>Space</kbd></button>
-            <div class="quiz-choices" id="quizChoices" hidden></div>
+            <ol class="quiz-choices" id="quizChoices" aria-label="選択肢（ヒント。選んでも採点されません）" hidden></ol>
             <div class="quiz-answer" id="quizAnswerBox" role="status" aria-live="polite" hidden>
-              <p id="quizSelectedAnswer" hidden></p>
               <span class="box-label" id="quizAnswerLabel">💡 答え</span>
               <p class="quiz-answer-text" id="quizAnswer"></p>
               <span class="box-label">解説・根拠</span>
@@ -424,7 +423,7 @@
               <label class="input-label" for="libFormat">形式</label>
               <select id="libFormat" class="simple-input">
                 <option value="self">自己採点（⭕/❌）</option>
-                <option value="choice">4択</option>
+                <option value="choice">選択肢つき（答えを見て自己判定）</option>
               </select>
             </div>
             <div>

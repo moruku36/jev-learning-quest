@@ -1911,7 +1911,9 @@ kbd {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-bottom: 12px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
 }
 
 .quiz-choice {
@@ -1928,18 +1930,7 @@ kbd {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 10px 12px;
-  cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease;
-}
-
-.quiz-choice:hover:not(:disabled) {
-  border-color: var(--accent-blue);
-  background: var(--bg-card-hover);
-}
-
-.quiz-choice:disabled {
-  cursor: default;
-  opacity: 0.75;
 }
 
 .quiz-choice.correct {
@@ -1948,11 +1939,6 @@ kbd {
   opacity: 1;
 }
 
-.quiz-choice.wrong {
-  border-color: var(--accent-red);
-  background: #450a0a;
-  opacity: 1;
-}
 
 .choice-no {
   flex-shrink: 0;

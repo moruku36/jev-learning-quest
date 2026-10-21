@@ -40,11 +40,11 @@ async function mountNetworkExercise(quest) {
   STATE.nwQuestion=null;
   document.getElementById('inputAnswer').closest('.run-input-group').hidden=isNW;
   document.querySelector('#questRunCard .eval-row').hidden=isNW;
-  const steps=isNW?['画面内の原本を読む', '午前は選択回答、午後は設問ごとに答案を書く', '午前は自動採点、午後は公式解答例で自己採点して保存']:['下の設問・作業内容を読む（解説はまだ見せません）','答案やメモを書く','自己採点して保存 → Jev が理解度と復習の要否を判断'];
+  const steps=isNW?['画面内の原本を読む', '午前は答えを思い出す、午後は設問ごとに答案を書く', '午前は公式正解を見て自己判定、午後は公式解答例で自己採点して保存']:['下の設問・作業内容を読む（解説はまだ見せません）','答案やメモを書く','自己採点して保存 → Jev が理解度と復習の要否を判断'];
   document.querySelectorAll('#questRunCard .run-steps li').forEach((li,i)=>li.textContent=steps[i]);
   if(!isNW)return;
   document.getElementById('writtenExtra').hidden=true;
-  STATE.nwQuestion=null;STATE.nwChoice=null;
+  STATE.nwQuestion=null;
   host.textContent='原本画像を読み込んでいます…';
   let q=quest.networkQuestion || STATE.library?.network?.find(q=>q.itemId===quest.itemId);
   if(!q){
@@ -53,7 +53,7 @@ async function mountNetworkExercise(quest) {
   }
   if(!q){host.textContent='問題データが見つかりません。';return;}
   STATE.nwQuestion=q;
-  document.getElementById('runPrompt').textContent=`${q.sourceLabel}\n${q.kind==='choice'?'原本画像の選択肢から回答してください。':'原本の全設問に回答し、公式解答例を参照して自己採点してください。'}\n練習目安 ${q.minutes}分（${q.note}）`;
+  document.getElementById('runPrompt').textContent=`${q.sourceLabel}\n${q.kind==='choice'?'原本画像を見て答えを思い出し、「答えを見る」で公式正解を確認してください。':'原本の全設問に回答し、公式解答例を参照して自己採点してください。'}\n練習目安 ${q.minutes}分（${q.note}）`;
   document.getElementById('runLink').href=`${q.questionPdf}#page=${q.pdfPage}`;
   host.replaceChildren();
   const source=document.createElement('a');source.className='run-link';source.href=q.sourcePage;source.target='_blank';source.rel='noopener';source.textContent='この問題の出典・収録ページ・利用条件 ↗';host.append(source);
@@ -61,30 +61,25 @@ async function mountNetworkExercise(quest) {
   host.append(createNetworkImageViewer(q.images,q.pdfPages,q.sourceLabel+' 本文・選択肢・図表'));
   const hint=document.createElement('p');hint.className='field-hint';hint.textContent='拡大・縮小して読み、拡大中は画像をスクロールできます。原本の本文・図表をそのまま表示しています。';host.append(hint);
   if(q.kind==='choice'){
-    const answerHeading=document.createElement('h3');answerHeading.textContent='回答';host.append(answerHeading);
-    const choices=document.createElement('div');choices.className='pill-group nw-choice';choices.setAttribute('role','group');choices.setAttribute('aria-label','回答の選択肢。キーボード1〜4でア〜エ');
-    for(const label of ['ア','イ','ウ','エ']){
-      const button=document.createElement('button');button.type='button';button.className='pill';button.textContent=label;button.setAttribute('aria-pressed','false');
-      button.onclick=()=>{STATE.nwChoice=label;for(const b of choices.children){b.classList.toggle('active',b===button);b.setAttribute('aria-pressed',String(b===button));}};choices.append(button);
-    }
-    const grade=document.createElement('button');grade.type='button';grade.className='btn btn-primary mt-8';grade.textContent='回答を採点する';
+    // Recall first: the official key is hidden until the learner asks for it, and
+    // only the learner's own judgement counts as right or wrong.
+    const answerHeading=document.createElement('h3');answerHeading.textContent='答えを思い出す';host.append(answerHeading);
+    const prompt=document.createElement('p');prompt.className='field-hint';prompt.textContent='原本の選択肢を見て、答え（ア〜エ）を思い浮かべてから「答えを見る」を押してください。';
+    const reveal=document.createElement('button');reveal.type='button';reveal.className='btn btn-secondary mt-8';reveal.textContent='答えを見る';
     const result=document.createElement('div');result.className='nw-feedback';result.hidden=true;result.tabIndex=-1;result.setAttribute('role','status');
-    grade.onclick=()=>{
-      if(!STATE.nwChoice){showToast('ア・イ・ウ・エから選んでください','warn');return;}
-      STATE.nwGraded=true;setEvalState(STATE.nwChoice===q.correctChoice);grade.disabled=true;
-      for(const b of choices.children)b.disabled=true;
-      result.hidden=false;
-      result.textContent=`${STATE.isCorrect?'正解':'不正解'} · あなたの回答: ${STATE.nwChoice} · 正解: ${q.correctChoice}（IPA公式）`;
-      const explanation=document.createElement('p');explanation.className='field-hint';explanation.textContent='解説: この教材には公式正解表を収録しています。解説本文は未収録です。正解と原本を照らし合わせて覚え直してください。';result.append(explanation);
-      result.focus({preventScroll:true});result.scrollIntoView({block:'nearest',behavior:'smooth'});
+    const judge=document.createElement('div');judge.className='pill-group nw-judge';judge.setAttribute('role','group');judge.setAttribute('aria-label','覚えていたかどうかの自己判定');judge.hidden=true;
+    for(const [label,ok] of [['⭕ 覚えていた',true],['❌ 覚えていない',false]]){
+      const button=document.createElement('button');button.type='button';button.className='pill';button.textContent=label;button.setAttribute('aria-pressed','false');
+      button.onclick=()=>{STATE.nwGraded=true;setEvalState(ok);for(const b of judge.children){b.classList.toggle('active',b===button);b.setAttribute('aria-pressed',String(b===button));}};judge.append(button);
+    }
+    reveal.onclick=()=>{
+      reveal.hidden=true;result.hidden=false;judge.hidden=false;
+      result.textContent=`正解: ${q.correctChoice}（IPA公式）`;
+      const explanation=document.createElement('p');explanation.className='field-hint';explanation.textContent='解説: この教材には公式正解表を収録しています。解説本文は未収録です。正解と原本を照らし合わせて覚え直してください。答えを見ただけでは正解にならないので、下で自己判定を選んでください。';result.append(explanation);
       const a=document.createElement('a');a.className='run-link';a.href=`${q.answerPdf}#page=1`;a.target='_blank';a.rel='noopener';a.textContent=' 公式正解表を確認 ↗';result.append(a);
+      result.focus({preventScroll:true});result.scrollIntoView({block:'nearest',behavior:'smooth'});
     };
-    host.append(choices,grade,result);
-    host.onkeydown=e=>{
-      if(STATE.nwGraded || e.repeat || e.ctrlKey || e.metaKey || e.altKey || !/^[1-4]$/.test(e.key))return;
-      e.preventDefault();choices.children[Number(e.key)-1].click();grade.focus({preventScroll:true});
-    };
-    choices.children[0].focus({preventScroll:true});
+    host.append(prompt,reveal,result,judge);
   }else{
     const note=document.createElement('p');note.textContent='設問の本文・字数制限は上の原本画像にあります。各欄に回答し、公式解答例に照らして採点してください。';host.append(note);
     const reveal=document.createElement('button');reveal.type='button';reveal.className='btn btn-outline';reveal.textContent='公式解答例を表示する';
@@ -112,8 +107,8 @@ function prepareNetworkSubmission(){
   const q=STATE.nwQuestion;
   if(!q)throw Error('問題の読み込みが完了していません');
   if(q.kind==='choice'){
-    if(!STATE.nwGraded)throw Error('選択肢を選んで、回答を採点してください');
-    return {selectedChoice:STATE.nwChoice,userAnswer:`選択: ${STATE.nwChoice}`,isCorrect:STATE.nwChoice===q.correctChoice};
+    if(!STATE.nwGraded)throw Error('「答えを見る」で正解を確認し、「覚えていた／覚えていない」を選んでください');
+    return {recallJudgement:true,userAnswer:`自己判定: ${STATE.isCorrect?'覚えていた':'覚えていない'}（公式正解 ${q.correctChoice}）`,isCorrect:STATE.isCorrect};
   }
   const answers=q.sections.flatMap(s=>s.subquestions).filter(s=>!s.invalid).map(s=>{
     const answer=document.querySelector(`[data-nw-answer="${s.id}"]`).value.trim();
