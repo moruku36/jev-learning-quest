@@ -257,23 +257,12 @@
               <button class="btn btn-outline btn-sm confidence-choice" data-confidence="low" type="button" aria-pressed="false">自信なし</button>
             </div>
             <button class="btn btn-secondary btn-lg quiz-reveal" id="btnQuizReveal" type="button">答えを見る <kbd>Space</kbd></button>
-            <div class="quiz-choices" id="quizChoices" hidden></div>
+            <ol class="quiz-choices" id="quizChoices" aria-label="選択肢（ヒント。選んでも採点されません）" hidden></ol>
             <div class="quiz-answer" id="quizAnswerBox" role="status" aria-live="polite" hidden>
-              <p id="quizSelectedAnswer" hidden></p>
               <span class="box-label" id="quizAnswerLabel">💡 答え</span>
               <p class="quiz-answer-text" id="quizAnswer"></p>
               <span class="box-label">解説・根拠</span>
               <p id="quizExplanation" class="field-hint"></p>
-              <div class="quiz-mistake-check" id="quizMistakeCheck" hidden>
-                <label class="input-label" for="quizMistakeReason">間違えた理由（任意）</label>
-                <select id="quizMistakeReason" class="simple-input">
-                  <option value="">選択してください</option>
-                  <option value="読み落とし">読み落とし</option>
-                  <option value="知識不足">知識不足</option>
-                  <option value="設問要求とのずれ">設問要求とのずれ</option>
-                  <option value="時間不足">時間不足</option>
-                </select>
-              </div>
               <div class="quiz-answer-links">
                 <a class="run-link" id="quizSourceLink" href="#" target="_blank" rel="noopener noreferrer">元の過去問と解説を見る ↗</a>
                 <button class="link-btn" id="btnQuizReport" type="button">⚠ この問題おかしい？</button>
@@ -290,8 +279,18 @@
             <button class="btn btn-outline btn-lg" id="btnQuizWrong" type="button">❌ まだ <kbd>N</kbd></button>
             <button class="btn btn-primary btn-lg" id="btnQuizRight" type="button">⭕ 覚えてた <kbd>Y</kbd></button>
           </div>
+          <div class="quiz-mistake-check" id="quizMistakeCheck" hidden>
+            <label class="input-label" for="quizMistakeReason">間違えた理由（任意）</label>
+            <select id="quizMistakeReason" class="simple-input">
+              <option value="">選択してください</option>
+              <option value="読み落とし">読み落とし</option>
+              <option value="知識不足">知識不足</option>
+              <option value="設問要求とのずれ">設問要求とのずれ</option>
+              <option value="時間不足">時間不足</option>
+            </select>
+          </div>
           <div class="quiz-next" id="quizNext" hidden>
-            <button class="btn btn-primary btn-lg" id="btnQuizNext" type="button">次へ <kbd>Enter</kbd></button>
+            <button class="btn btn-primary btn-lg" id="btnQuizNext" type="button"><span id="quizNextLabel">次へ</span> <kbd>Enter</kbd></button>
           </div>
 
           <div class="run-card-footer">
@@ -424,7 +423,7 @@
               <label class="input-label" for="libFormat">形式</label>
               <select id="libFormat" class="simple-input">
                 <option value="self">自己採点（⭕/❌）</option>
-                <option value="choice">4択</option>
+                <option value="choice">選択肢つき（答えを見て自己判定）</option>
               </select>
             </div>
             <div>

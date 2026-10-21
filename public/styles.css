@@ -1911,7 +1911,9 @@ kbd {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-bottom: 12px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
 }
 
 .quiz-choice {
@@ -1928,18 +1930,7 @@ kbd {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 10px 12px;
-  cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease;
-}
-
-.quiz-choice:hover:not(:disabled) {
-  border-color: var(--accent-blue);
-  background: var(--bg-card-hover);
-}
-
-.quiz-choice:disabled {
-  cursor: default;
-  opacity: 0.75;
 }
 
 .quiz-choice.correct {
@@ -1948,11 +1939,6 @@ kbd {
   opacity: 1;
 }
 
-.quiz-choice.wrong {
-  border-color: var(--accent-red);
-  background: #450a0a;
-  opacity: 1;
-}
 
 .choice-no {
   flex-shrink: 0;
@@ -2208,3 +2194,15 @@ kbd {
 #btnCompRetry { margin:8px 8px 8px 0; }
 .nw-viewer button { min-height:44px; }
 .nw-image-box:focus-visible, .nw-feedback:focus-visible { outline:3px solid var(--accent-blue); outline-offset:3px; }
+
+/* Judged card: keep the judge row in place; "next" sits below it. */
+.quiz-judge .btn.chosen { outline:3px solid var(--accent-blue); outline-offset:2px; }
+.quiz-judge .btn:disabled:not(.chosen) { opacity:.45; }
+
+/* Small screens: drop the keyboard hints so the judge labels stay on one line without shrinking the buttons. */
+@media (max-width: 480px) {
+  .quiz-judge { gap: 8px; }
+  .quiz-judge .btn { white-space: nowrap; padding-left: 8px; padding-right: 8px; }
+  .quiz-judge .btn kbd { display: none; }
+}
+.quiz-next .btn:disabled { opacity: .6; cursor: progress; }

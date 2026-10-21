@@ -36,6 +36,16 @@ const { generateQuestCandidates } = require('./lib/quest-engine');
         assert(['ア','イ','ウ','エ'].includes(q.correctChoice));
         for(const selectedChoice of ['ア','イ','ウ','エ']) assert.equal(gradeNetworkAnswer(q,{selectedChoice,isCorrect:selectedChoice!==q.correctChoice}).isCorrect,selectedChoice===q.correctChoice);
         assert.throws(()=>gradeNetworkAnswer(q,{selectedChoice:'A'}));
+        // Recall mode: only the learner's explicit judgement counts; the correct key is never inferred.
+        for(const isCorrect of [true,false]) {
+          const g=gradeNetworkAnswer(q,{recallJudgement:true,isCorrect});
+          assert.equal(g.isCorrect,isCorrect);assert.equal(g.mode,'self-recall');
+          assert.equal(g.answers[0].correctChoice,q.correctChoice);assert.equal(g.score.correct,isCorrect?1:0);
+        }
+        assert.throws(()=>gradeNetworkAnswer(q,{}),'answer shown without a judgement is not graded');
+        assert.throws(()=>gradeNetworkAnswer(q,{recallJudgement:true}));
+        assert.throws(()=>gradeNetworkAnswer(q,{recallJudgement:true,isCorrect:'true'}));
+        assert.throws(()=>gradeNetworkAnswer(q,{isCorrect:true}),'client isCorrect alone is ignored');
       } else {
         assert(q.sections.length>0 && q.answerImages.length===q.answerPages.length);
         assert.equal(new Set(q.sections.flatMap(s=>s.subquestions).map(s=>s.id)).size,q.sections.flatMap(s=>s.subquestions).length);
@@ -98,6 +108,17 @@ const { generateQuestCandidates } = require('./lib/quest-engine');
       assert.equal(saved.history.category,'nw');
       assert.equal(saved.history.isCorrect,false);
       assert.equal(saved.history.gradingMode,question.kind==='choice'?'official-key':'self-assessment');
+      if(question.kind==='choice') {
+        const before=(await storage.load()).history.length;
+        const rejected=await fetch(base+'/api/history',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemId:question.itemId,category:'nw',title:question.title,isCorrect:true,userAnswer:'x'})});
+        assert.equal(rejected.status,400);
+        assert.equal((await storage.load()).history.length,before,'A rejected reveal-only submission saves nothing');
+        const recalled=await request('/api/history',{itemId:question.itemId,category:'nw',title:question.title,recallJudgement:true,isCorrect:false,mistakeReason:'知識不足',userAnswer:'自己判定'});
+        assert.equal(recalled.history.gradingMode,'self-recall');assert.equal(recalled.history.isCorrect,false);
+        assert.equal(recalled.history.nwAnswers[0].correctChoice,question.correctChoice);
+        assert(recalled.history.nextReviewDate,'A forgotten answer is scheduled for review');
+        const s0=await storage.load();s0.history=s0.history.filter(h=>h.id!==recalled.history.id);await storage.save(null,s0);
+      }
       assert(saved.history.nwAnswers.length>0);
       assert(saved.history.nextReviewDate);
       content=await request('/api/content');

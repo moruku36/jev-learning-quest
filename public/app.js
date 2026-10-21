@@ -483,7 +483,7 @@ function closeCandidatesModal() {
 function hasUnsavedQuestAnswers() {
   if (!document.getElementById('questRunCard').hidden) {
     if (['inputAnswer','inputMistakeDetail','inputQuestionText'].some(id=>document.getElementById(id).value.trim())) return true;
-    if (STATE.currentQuest?.category==='nw' && (STATE.nwChoice ||
+    if (STATE.currentQuest?.category==='nw' && (STATE.nwGraded ||
       [...document.querySelectorAll('[data-nw-answer], [data-nw-score]')].some(i=>i.value.trim()))) return true;
   }
   return !document.getElementById('quizRunCard').hidden && Boolean(STATE.quiz?.answers.length || STATE.quiz?.confidence);
@@ -669,7 +669,7 @@ async function handleCompleteQuest() {
     const answers=nwPayload.nwAnswers || [{isCorrect:nwPayload.isCorrect}];
     renderCompletion({practice:true,history:{id:quest.historyId,isCorrect:nwPayload.isCorrect,
       nwScore:{correct:answers.filter(a=>a.isCorrect).length,total:answers.length},
-      gradingMode:q.kind==='choice'?'official-key':'self-assessment'}});
+      gradingMode:q.kind==='choice'?'self-recall':'self-assessment'}});
     stopTimer();return;
   }
   const btn = document.getElementById('btnCompleteQuest');
@@ -736,11 +736,11 @@ function renderCompletion(data) {
   document.getElementById('compReviewTag').textContent = ev.needsReview ? '復習: 数日後にもう一度' : '復習: 不要';
   document.getElementById('compSourceTag').textContent = byJev ? '判定: 🧠 Jev (Score / Noul)' : '判定: 📋 ルール';
 
-  if(data.history?.nwScore){document.getElementById('compScoreTag').textContent=`採点: ${data.history.nwScore.correct} / ${data.history.nwScore.total}`;document.getElementById('compSourceTag').textContent=data.history.gradingMode==='official-key'?'判定: IPA公式正解':'判定: 設問別の自己採点';}
+  if(data.history?.nwScore){document.getElementById('compScoreTag').textContent=data.history.gradingMode==='self-recall'?`自己判定: ${data.history.isCorrect?'覚えていた':'覚えていない'}`:`採点: ${data.history.nwScore.correct} / ${data.history.nwScore.total}`;document.getElementById('compSourceTag').textContent=data.history.gradingMode==='official-key'?'判定: IPA公式正解':data.history.gradingMode==='self-recall'?'判定: 自己判定（公式正解との自動採点ではありません）':'判定: 設問別の自己採点';}
 
   let msg;
   if (data.resolvedHistoryId) {
-    msg = '再挑戦に成功！ この弱点は「克服済み」になりました。';
+    msg = data.history?.gradingMode==='self-recall' ? '「覚えていた」の自己判定で、この弱点を「克服済み」にしました。' : '再挑戦に成功！ この弱点は「克服済み」になりました。';
   } else if (!STATE.isCorrect) {
     msg = `つまずき「${STATE.mistakeReason}」を記録しました。数日後に再挑戦クエストとして出題されます。`;
   } else if (ev.needsReview) {
@@ -751,7 +751,8 @@ function renderCompletion(data) {
   document.getElementById('compMessage').textContent = data.practice ? '練習の結果です。最初の回答履歴と復習予定はそのままです。' : msg;
 
   const notes = network?.kind==='choice'
-    ? `あなたの回答: ${STATE.nwChoice} · 正解: ${network.correctChoice}（IPA公式）\n解説本文は未収録です。原本と公式正解表を照らし合わせて覚え直してください。`
+    ? `正解: ${network.correctChoice}（IPA公式） · 自己判定: ${STATE.isCorrect?'覚えていた':'覚えていない'}
+解説本文は未収録です。原本と公式正解表を照らし合わせて覚え直してください。`
     : (data.answerNotes || '');
   setHidden('compAnswerNotes', !notes);
   document.getElementById('compAnswerNotesText').textContent = notes;
@@ -794,11 +795,11 @@ function startNetworkQuestion(q, retryOf, practice=false) {
   startQuestRun({
     type:'過去問を解く', category:'nw', title:`NW ${q.title}`, sourceRef:q.sourceLabel,
     networkQuestion:q, practice,
-    questionText:`${q.sourceLabel}\n原本画像を読み、${q.kind==='choice'?'選択肢を選んで自動採点します。':'大問内の全設問に答えて、公式解答例で自己採点します。'}`,
+    questionText:`${q.sourceLabel}\n原本画像を読み、${q.kind==='choice'?'答えを思い出してから公式正解を見て、自己判定します。':'大問内の全設問に答えて、公式解答例で自己採点します。'}`,
     url:q.questionPdf, answerUrl:q.answerPdf, recommendedMinutes:q.minutes,
     itemId:q.itemId, historyId:retryOf || (q.attempted && !q.done ? q.historyId : null),
     reason:'公式過去問を解き、判断の根拠とつまずきを記録します。',
-    criteria:q.kind==='choice'?'選択肢を選び、公式正解による採点結果を保存すること。':'大問内の全設問に答え、公式解答例と自己採点すること。',
+    criteria:q.kind==='choice'?'原本を見て答えを思い出し、公式正解を見て「覚えていた／覚えていない」を正直に選ぶこと。':'大問内の全設問に答え、公式解答例と自己採点すること。',
     decisionSource:'manual'
   });
 }
@@ -989,7 +990,7 @@ function renderHistoryList(history) {
         ${src}
         <span class="history-score">${escapeHtml(SCORE_LABELS[h.understandingScore] || '')}</span>
       </div>
-      ${h.nwAnswers?`<details class="nw-history"><summary>${h.gradingMode==='official-key'?'公式正解で採点':'設問別の自己採点'} ${h.nwScore.correct} / ${h.nwScore.total}${h.nwScore.excluded?`（無効 ${h.nwScore.excluded}小問を除外）`:''} · 答案を見る</summary>${h.nwAnswers.map(a=>`<p>${escapeHtml(a.id==='choice'?'選択回答':`設問${a.id}`)} · ${a.isCorrect?'できた':'できなかった'}${a.correctChoice?` · 正解 ${escapeHtml(a.correctChoice)}`:''}</p><pre>${escapeHtml(a.answer)}</pre>`).join('')}</details>`:''}`;
+      ${h.nwAnswers?`<details class="nw-history"><summary>${h.gradingMode==='self-recall'?`自己判定: ${h.isCorrect?'覚えていた':'覚えていない'}（公式採点ではありません）`:`${h.gradingMode==='official-key'?'公式正解で採点':'設問別の自己採点'} ${h.nwScore.correct} / ${h.nwScore.total}`}${h.nwScore.excluded?`（無効 ${h.nwScore.excluded}小問を除外）`:''} · 答案を見る</summary>${h.nwAnswers.map(a=>`<p>${escapeHtml(a.id==='choice'?(h.gradingMode==='self-recall'?'想起':'選択回答'):`設問${a.id}`)} · ${a.isCorrect?(h.gradingMode==='self-recall'?'覚えていた':'できた'):(h.gradingMode==='self-recall'?'覚えていない':'できなかった')}${a.correctChoice?` · 正解 ${escapeHtml(a.correctChoice)}`:''}</p><pre>${escapeHtml(a.answer)}</pre>`).join('')}</details>`:''}`;
   }).join('');
 }
 
@@ -1179,25 +1180,17 @@ function initQuiz() {
   });
 
   // キーボード操作
-  //   自己採点: Space/Enter で答えを表示、Y/→ で覚えてた、N/← でまだ
-  //   4択: 1〜4 で選択、Enter で次へ
+  //   Space/Enter で答えを表示、Y/→ で覚えてた、N/← でまだ、判定後は Enter で次へ
   document.addEventListener('keydown', e => {
     if (!STATE.quiz || document.getElementById('quizRunCard').hidden) return;
     const typing = e.target instanceof Element && e.target.closest('input, textarea, select');
     const confidenceControl = e.target instanceof Element && e.target.closest('#quizConfidence button');
     if (typing || confidenceControl || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+    // A focused link/button/summary keeps its own Enter/Space behaviour (open the link, press the button).
+    const nativeControl = e.target instanceof Element && e.target.closest('a[href], button:not(:disabled), summary');
+    if (nativeControl && (e.key === 'Enter' || e.key === ' ')) return;
     const card = STATE.quiz.cards[STATE.quiz.index];
     const revealed = !document.getElementById('quizAnswerBox').hidden;
-    if (card && card.choices) {
-      if (!revealed && /^[1-4]$/.test(e.key)) {
-        e.preventDefault();
-        chooseQuizAnswer(parseInt(e.key, 10) - 1);
-      } else if (revealed && e.key === 'Enter') {
-        e.preventDefault();
-        goNextQuizCard();
-      }
-      return;
-    }
     const answered=STATE.quiz.answers.some(a=>a.id===card?.id);
     if(answered && e.key==='Enter') {e.preventDefault();goNextQuizCard();return;}
     if (!revealed && (e.key === ' ' || e.key === 'Enter')) {
@@ -1270,8 +1263,6 @@ function renderQuizCard() {
   document.getElementById('quizQuestion').textContent = card.question;
   document.getElementById('quizAnswer').textContent = card.answer;
   document.getElementById('quizAnswerLabel').textContent = '正解';
-  document.getElementById('quizSelectedAnswer').textContent='';
-  setHidden('quizSelectedAnswer',true);
   document.getElementById('quizExplanation').textContent=card.explanation || 'この教材には解説本文は収録されていません。出典リンクで根拠を確認してください。';
   document.getElementById('quizSourceLink').href = card.url;
   document.getElementById('quizReportNote').value = '';
@@ -1285,26 +1276,35 @@ function renderQuizCard() {
   setHidden('quizAnswerBox', true);
   setHidden('quizJudge', true);
   setHidden('quizNext', true);
+  for (const id of ['btnQuizRight', 'btnQuizWrong']) {
+    const b = document.getElementById(id);
+    b.disabled = false; b.classList.remove('chosen'); b.removeAttribute('aria-pressed');
+  }
+  STATE.quiz.nextArmedAt = 0;
+  syncQuizNext();
 
+  // 4択形式の選択肢は思い出すためのヒント。選んでも採点せず、答えを見て自己判定する
   const choicesBox = document.getElementById('quizChoices');
   if (card.choices) {
-    setHidden('btnQuizReveal', true);
     choicesBox.innerHTML = card.choices.map((c, i) => `
-      <button class="quiz-choice" type="button" data-idx="${i}"><span class="choice-no">${i + 1}</span>${escapeHtml(c)}</button>`).join('');
-    choicesBox.querySelectorAll('.quiz-choice').forEach(btn => {
-      btn.addEventListener('click', () => chooseQuizAnswer(parseInt(btn.getAttribute('data-idx'), 10)));
-    });
+      <li class="quiz-choice"><span class="choice-no">${i + 1}</span>${escapeHtml(c)}</li>`).join('');
     choicesBox.hidden = false;
   } else {
     choicesBox.hidden = true;
     choicesBox.innerHTML = '';
-    setHidden('btnQuizReveal', false);
   }
+  setHidden('btnQuizReveal', false);
   const correct = answers.filter(a => a.correct).length;
   document.getElementById('quizScore').textContent = answers.length ? `⭕ ${correct} / ❌ ${answers.length - correct}` : '';
 }
 
 function revealQuizAnswer() {
+  const quiz = STATE.quiz;
+  if (!quiz || quiz.saving || !document.getElementById('quizAnswerBox').hidden) return;
+  const card = quiz.cards[quiz.index];
+  document.querySelectorAll('#quizChoices .quiz-choice').forEach((el, i) => {
+    el.classList.toggle('correct', card.choices?.[i] === card.answer);
+  });
   setHidden('quizAnswerBox', false);
   setHidden('quizJudge', false);
   setHidden('btnQuizReveal', true);
@@ -1335,31 +1335,30 @@ function recordQuizAnswer(correct) {
   return true;
 }
 
-// 4択: 選んだら自動で採点し、答えを見せて「次へ」を待つ
-function chooseQuizAnswer(idx) {
+const QUIZ_NEXT_DELAY_MS = 600;
+// "Next" is visibly disabled while the just-made judgement settles or a save is in flight,
+// instead of silently ignoring clicks.
+let quizNextTimer = null;
+function syncQuizNext() {
+  clearTimeout(quizNextTimer);
   const quiz = STATE.quiz;
-  if(!quiz || quiz.saving)return;
-  const card = quiz.cards[quiz.index];
-  if (!card || !Number.isInteger(idx) || idx<0 || idx>=card.choices?.length)return;
-  if (!card.choices || !document.getElementById('quizAnswerBox').hidden) return;
-  const correct = card.choices[idx] === card.answer;
-  document.querySelectorAll('#quizChoices .quiz-choice').forEach((btn, i) => {
-    btn.disabled = true;
-    if (card.choices[i] === card.answer) btn.classList.add('correct');
-    else if (i === idx) btn.classList.add('wrong');
-  });
-  if(!recordQuizAnswer(correct))return;
-  document.getElementById('quizSelectedAnswer').textContent='あなたの回答: '+card.choices[idx];
-  setHidden('quizSelectedAnswer',false);
-  document.getElementById('quizAnswerLabel').textContent = correct ? '⭕ 正解！' : '❌ 不正解 — 正しい答え';
-  setHidden('quizAnswerBox', false);
-  setHidden('quizNext', false);
-  document.getElementById('btnQuizNext').focus({ preventScroll: true });
+  if (!quiz) return;
+  const btn = document.getElementById('btnQuizNext');
+  const label = document.getElementById('quizNextLabel');
+  const wait = quiz.nextArmedAt ? quiz.nextArmedAt - Date.now() : 0;
+  if (quiz.saving) {
+    btn.disabled = true; label.textContent = '保存中…';
+  } else if (wait > 0) {
+    btn.disabled = true; label.textContent = '判定を反映中…';
+    quizNextTimer = setTimeout(syncQuizNext, wait + 20);
+  } else {
+    btn.disabled = false; label.textContent = '次へ';
+  }
 }
-
 function goNextQuizCard() {
   const quiz = STATE.quiz;
   if (!quiz || quiz.saving || !quiz.answers.some(a=>a.id===quiz.cards[quiz.index]?.id)) return;
+  if (quiz.nextArmedAt && Date.now() < quiz.nextArmedAt) return; // just judged: ignore stray repeat input
   quiz.index++;
   if (quiz.index < quiz.cards.length) renderQuizCard();
   else finishQuiz();
@@ -1370,8 +1369,14 @@ function judgeQuizCard(correct) {
   if (!quiz || quiz.saving) return;
   if(document.getElementById('quizAnswerBox').hidden || !recordQuizAnswer(correct))return;
   document.getElementById('quizAnswerLabel').textContent=correct?'覚えていた · 正解':'覚え直す · 正解';
-  setHidden('quizJudge',true);setHidden('quizNext',false);
-  document.getElementById('btnQuizNext').focus({preventScroll:true});
+  // The judge row stays in place (disabled, choice marked) and "next" appears on its own row
+  // below, so a double-click or held key on the judge button cannot land on "next".
+  for(const [id,ok] of [['btnQuizRight',true],['btnQuizWrong',false]]){
+    const b=document.getElementById(id);b.disabled=true;b.classList.toggle('chosen',ok===correct);b.setAttribute('aria-pressed',String(ok===correct));
+  }
+  quiz.nextArmedAt=Date.now()+QUIZ_NEXT_DELAY_MS;
+  setHidden('quizNext',false);
+  syncQuizNext();
 }
 
 async function sendQuizReport() {
@@ -1399,12 +1404,25 @@ async function sendQuizReport() {
 
 async function quitQuiz() {
   const quiz = STATE.quiz;
-  if (quiz && quiz.answers.length > 0
-    && confirm(quiz.practice
-      ? `ここまでの${quiz.answers.length}問の練習を終了しますか？\nこの再挑戦は保存されません。`
-      : `ここまでの${quiz.answers.length}問の結果を保存して終わりますか？\n（キャンセルすると保存せずに中断します）`)) {
-    await finishQuiz();
+  // Quitting mid-save used to drop the quiz state, so a failed save could not be retried.
+  if (quiz?.saving) {
+    showToast('保存中です。完了するか失敗してから中断してください', 'info');
     return;
+  }
+  if (quiz && quiz.answers.length > 0) {
+    if (confirm(quiz.practice
+      ? `ここまでの${quiz.answers.length}問の練習を終了しますか？
+この再挑戦は保存されません。`
+      : `ここまでの${quiz.answers.length}問の結果を保存して終わりますか？
+（キャンセルすると、このまま続けられます）`)) {
+      await finishQuiz();
+      return;
+    }
+    // Cancel keeps the quiz, its unsaved answers and the screen. Discarding needs its own confirmation.
+    if (!confirm(quiz.practice
+      ? 'この練習を保存せずに破棄しますか？'
+      : `ここまでの${quiz.answers.length}問の回答を保存せずに破棄しますか？
+（キャンセルすると、このまま続けられます）`)) return;
   }
   STATE.quiz = null;
   setHidden('quizRunCard', true);
@@ -1423,6 +1441,7 @@ async function finishQuiz() {
   }
   quiz.saving = true;
   document.getElementById('quizBarFill').style.width = '100%';
+  syncQuizNext();
   const payload = {
     answers: quiz.answers,
     title: quiz.quest.title,
@@ -1458,6 +1477,7 @@ async function finishQuiz() {
     queueQuizResult(payload, quiz);
   } finally {
     quiz.saving = false;
+    syncQuizNext();
   }
 }
 
@@ -1530,7 +1550,7 @@ function initLibrary() {
     const labels = [session === 'all' ? '過去5年分' : sessionSelect.selectedOptions[0].textContent];
     if (mode === 'weak') labels.push('弱点分野');
     else if (group !== 'all') labels.push(groupSelect.selectedOptions[0].textContent);
-    if (format === 'choice') labels.push('4択');
+    if (format === 'choice') labels.push('選択肢つき');
     switchTab('quest');
     startQuizRun({
       type: '一問一答',

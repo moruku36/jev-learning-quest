@@ -8,7 +8,7 @@ A learning web application where Jev selects one task based on available time an
 
 Choose available time and mood, receive one quest, answer and self-assess, then let Jev judge understanding and whether review is needed.
 
-Answers stay visible until you choose Next. After a session, retry only the mistakes as unsaved practice; your first result and scheduled review remain intact. Network originals have in-page zoom, scrolling and page controls, and morning answers show the official key before and after saving. See the [memorization UI notes](docs/memorization-ui.md) for scope, limitations and validation.
+Answers stay visible until you choose Next. After a session, retry only the mistakes as unsaved practice; your first result and scheduled review remain intact. Network originals have in-page zoom, scrolling and page controls, and morning questions use recall-and-reveal: see the question, press "Show answer" for the official key, then self-judge as remembered or not (revealing alone never counts as correct). See the [memorization UI notes](docs/memorization-ui.md) for scope, limitations and validation.
 
 ## Runtime choices
 
