@@ -124,9 +124,14 @@ async function runVerification() {
   assert.strictEqual(regSC.data.success, true);
   const scItemId = regSC.data.item.id;
 
+  // 旧分野（AI・クラウド・セキュリティ）への新規登録はできない（既存データは残すが、新しくは増やさない）
+  for (const archived of ['ai', 'cloud', 'security']) {
+    const regOld = await post('/api/registered-items', { type: 'catchup', category: archived, title: '旧分野の記事' });
+    assert.strictEqual(regOld.status, 400, `${archived} は新規登録できない`);
+  }
   const regCU = await post('/api/registered-items', {
     type: 'catchup',
-    category: 'security',
+    category: 'sc',
     title: 'ゼロトラストにおけるmTLS運用設計ガイド',
     source: 'セキュリティ専門機関 レポート',
     nextAction: '設定を確認する'
@@ -235,23 +240,49 @@ async function runVerification() {
   assert.strictEqual(histWithQuiz.quizStats.wrongDue, 2);
   console.log('✔ 間違えた問題は翌日以降に復習として優先して出題される');
 
-  console.log('\n=== [5-c] AI レポート・論文 ===');
-  assert.ok(content.readings.length >= 30, '十分な数のレポート・論文が登録されている');
-  assert.ok(content.readings.every(r => /^https:\/\//.test(r.url) && r.org && r.focus && r.task));
-  const recAi = await post('/api/quest/recommend', { minutes: 20, category: 'ai', goal: 'input' });
-  const readingCands = recAi.data.allCandidates.filter(c => c.type === 'レポートを読む');
-  assert.strictEqual(readingCands.length, 3, '未読のレポートを3件まで提案');
-  assert.strictEqual(recAi.data.quest.type, 'レポートを読む', '「サクッと情報収集」ではレポートも選ばれる');
-  const firstReading = readingCands[0];
-  await post('/api/history', {
-    itemId: firstReading.itemId, category: 'ai', questType: 'レポートを読む',
-    title: firstReading.title, userAnswer: '要点メモ', isCorrect: true
-  });
-  const recAi2 = await post('/api/quest/recommend', { minutes: 20, category: 'ai', goal: 'input' });
-  assert.ok(!recAi2.data.allCandidates.some(c => c.id === firstReading.id), '読了したレポートは提案しない');
-  const { data: content2 } = await get('/api/content');
-  assert.strictEqual(content2.readings.find(r => r.itemId === firstReading.itemId).done, true);
-  console.log('✔ AI 大手のレポートが候補になり、読了すると次の未読に進む');
+  console.log('\n=== [5-c] 旧分野（AI・クラウド・セキュリティ）の読み物は出さず、データは残す ===');
+  assert.strictEqual(content.readings, undefined, 'レポート・論文の一覧は返さない');
+  assert.strictEqual((await get('/api/ai-feed')).status, 404, 'AI の新着の取得口は閉じている');
+  for (const old of ['ai', 'cloud', 'security']) {
+    const recOld = await post('/api/quest/recommend', { minutes: 20, category: old, goal: 'input' });
+    assert.ok(recOld.data.allCandidates.every(c => !['ai', 'cloud', 'security'].includes(c.category)), `${old} を指定しても旧分野の候補は出ない`);
+    assert.ok(!recOld.data.allCandidates.some(c => c.type === 'レポートを読む'));
+  }
+  // 旧分野の履歴・教材を保存データへ直接入れ、削除されず、画面・集計・推薦に出ないことを確認する
+  const legacy = JSON.parse(fs.readFileSync(storeFile, 'utf8'));
+  const legacyBase = { isCorrect: false, mistakeReason: '知識不足', nextReviewDate: '2020-01-01T00:00:00.000Z', completedAt: '2026-01-01T00:00:00.000Z' };
+  for (const cat of ['ai', 'cloud', 'security']) {
+    legacy.items.push({ id: `legacy-${cat}-item`, type: 'catchup', category: cat, title: `旧${cat}の記事`, nextAction: '試す' });
+    legacy.history.push({ id: `legacy-${cat}-hist`, itemId: `legacy-${cat}-item`, category: cat, title: `旧${cat}の演習`, ...legacyBase });
+  }
+  fs.writeFileSync(storeFile, JSON.stringify(legacy));
+  const rawBefore = JSON.parse(fs.readFileSync(storeFile, 'utf8'));
+  const { data: histLegacy } = await get('/api/history');
+  assert.ok(!histLegacy.history.some(h => ['ai', 'cloud', 'security'].includes(h.category)), '履歴一覧（復習・進捗・ホーム）に旧分野は出ない');
+  assert.deepStrictEqual(histLegacy.archivedCategories, ['ai', 'cloud', 'security']);
+  const { data: itemsLegacy } = await get('/api/registered-items');
+  assert.ok(!itemsLegacy.items.some(i => ['ai', 'cloud', 'security'].includes(i.category)), '教材一覧に旧分野は出ない');
+  for (const goal of ['balance', 'weakness', 'input', 'exercise']) {
+    const recLegacy = await post('/api/quest/recommend', { minutes: 120, category: 'all', goal });
+    assert.ok(!recLegacy.data.allCandidates.some(c => String(c.historyId || '').startsWith('legacy') || String(c.itemId || '').startsWith('legacy')), `${goal}: 旧分野の再挑戦・教材は出ない`);
+    assert.ok(!['ai', 'cloud', 'security'].includes(recLegacy.data.quest.category));
+  }
+  const { data: rawBackup } = await get('/api/backup');
+  for (const cat of ['ai', 'cloud', 'security']) {
+    assert.ok(rawBackup.items.some(i => i.id === `legacy-${cat}-item`), `${cat} の教材は物理削除されずバックアップに残る`);
+    assert.ok(rawBackup.history.some(h => h.id === `legacy-${cat}-hist`), `${cat} の履歴は物理削除されずバックアップに残る`);
+  }
+  // 通常の保存でも、旧分野のデータが書き換わったり消えたりしない
+  await post('/api/history', { category: 'sc', title: '旧分野データ保全の確認', userAnswer: 'x', isCorrect: true });
+  const rawAfter = JSON.parse(fs.readFileSync(storeFile, 'utf8'));
+  for (const id of ['legacy-ai-hist', 'legacy-cloud-hist', 'legacy-security-hist']) {
+    assert.deepStrictEqual(rawAfter.history.find(h => h.id === id), rawBefore.history.find(h => h.id === id), `${id} は変更されない`);
+  }
+  // 後続のテストが件数に依存しないよう、確認用に入れた旧データだけ取り除く
+  rawAfter.items = rawAfter.items.filter(i => !i.id.startsWith('legacy-'));
+  rawAfter.history = rawAfter.history.filter(h => !h.id.startsWith('legacy-'));
+  fs.writeFileSync(storeFile, JSON.stringify(rawAfter));
+  console.log('✔ 旧分野のレポート・記事・履歴は画面・おすすめ・集計から外れ、保存データには残る');
 
   const { data: fullBackup } = await get('/api/backup');
   assert.ok(fullBackup.quizProgress && Object.keys(fullBackup.quizProgress).length === 5);
@@ -323,16 +354,11 @@ async function runVerification() {
   assert.strictEqual(statusNoReview.reviewConfigured, false);
   console.log('✔ 午後/科目B を登録なしで演習でき、キーワード照合の結果が返る');
 
-  console.log('\n=== [5-g] AI の新着 ===');
-  const { data: feed } = await get('/api/ai-feed');
-  assert.strictEqual(feed.items.length, 1, 'https 以外のリンクは除外');
-  assert.strictEqual(feed.items[0].title, 'Mock AI Security Update');
-  assert.strictEqual(feed.items[0].summary, 'Summary & details');
-  assert.strictEqual(feed.items[0].publishedAt, '2026-09-23T10:00:00.000Z');
+  console.log('\n=== [5-g] フィード解析（旧AI新着の部品。画面・APIには出さない） ===');
   const { parseFeed } = require('./lib/feeds');
   const atom = parseFeed('<feed><entry><title>Atom Paper</title><link href="https://arxiv.org/abs/1234.5678v1" rel="alternate"/><published>2026-09-20T00:00:00Z</published><summary>abc</summary></entry></feed>', { id: 'a', name: 'arXiv' });
   assert.deepStrictEqual([atom[0].title, atom[0].url], ['Atom Paper', 'https://arxiv.org/abs/1234.5678v1']);
-  console.log('✔ RSS / Atom の新着を読み、安全なリンクだけを返す');
+  console.log('✔ RSS / Atom の解析部品は従来どおり動く');
 
   console.log('\n=== [5-h] PWA ===');
   const manifestRes = await fetch(`${BASE}/manifest.webmanifest`);
@@ -367,7 +393,7 @@ async function runVerification() {
 
   const recJev = await post('/api/quest/recommend', { minutes: 20, category: 'all' });
   assert.strictEqual(recJev.data.decisionSource, 'jev');
-  const evalJev = await post('/api/history', { category: 'ai', title: 'Jev評価テスト', userAnswer: 'x', isCorrect: true });
+  const evalJev = await post('/api/history', { category: 'sc', title: 'Jev評価テスト', userAnswer: 'x', isCorrect: true });
   assert.strictEqual(evalJev.data.evaluation.decisionSource, 'jev');
   assert.strictEqual(evalJev.data.evaluation.understandingScore, 4, 'score 2.67 は 4段階の4');
   assert.strictEqual(evalJev.data.evaluation.needsReview, false, 'noul 0.44 (<0.5) は復習不要');
@@ -483,7 +509,7 @@ async function runCloudVerification(base) {
   console.log('\n=== [10] クラウド版: データ保存と Jev ===');
   const reg = await call('/api/registered-items', {
     token: 'token-alice',
-    body: { type: 'catchup', category: 'ai', title: 'クラウド版テスト記事', source: 'テスト', url: 'javascript:alert(1)' }
+    body: { type: 'catchup', category: 'sc', title: 'クラウド版テスト記事', source: 'テスト', url: 'javascript:alert(1)' }
   });
   assert.strictEqual(reg.status, 201);
   assert.strictEqual(reg.data.item.url, '', 'javascript: URL は保存しない');

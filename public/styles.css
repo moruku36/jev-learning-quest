@@ -2206,3 +2206,21 @@ kbd {
   .quiz-judge .btn kbd { display: none; }
 }
 .quiz-next .btn:disabled { opacity: .6; cursor: progress; }
+
+/* AWS コース（基礎 / SAA / SAP） */
+.aws-course-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:14px; margin:14px 0 4px; }
+.aws-course { background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:14px; display:flex; flex-direction:column; gap:8px; min-width:0; }
+.aws-course-head { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+.aws-code { font-family:var(--font-mono); font-size:12px; color:#93c5fd; }
+.aws-course-name { font-size:12px; color:var(--text-muted); margin:0; overflow-wrap:anywhere; }
+.aws-domains { list-style:none; margin:4px 0; padding:0; display:flex; flex-direction:column; gap:6px; font-size:12px; }
+.aws-domains li { display:flex; flex-direction:column; gap:1px; padding-bottom:6px; border-bottom:1px solid var(--border); }
+.aws-domains li:last-child { border-bottom:none; }
+.aws-domains li.weak span:last-child { color:#fbbf24; }
+.aws-course-actions, .aws-review-buttons { display:flex; flex-wrap:wrap; gap:8px; }
+.aws-course-actions .btn { flex:1 1 auto; min-height:44px; }
+.aws-review-buttons .btn { min-height:44px; }
+.wrong-e { font-size:12px; color:var(--text-muted); line-height:1.6; }
+@media (max-width: 480px) {
+  .aws-course-grid { grid-template-columns:1fr; }
+}

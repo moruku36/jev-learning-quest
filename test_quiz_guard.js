@@ -4,16 +4,16 @@ const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/st
 function harness(){
   const answersQueue=[],nodes=new Map(),timers=[],toasts=[],apiCalls=[];let clock=1_000_000,prompts=0,keydown=null,apiImpl=async()=>({});
   class FakeDate extends Date{static now(){return clock;}}
-  const el=id=>{if(!nodes.has(id)){const e={id,value:'',textContent:'',innerHTML:'',hidden:true,disabled:false,listeners:{},style:{},attrs:{},classes:new Set(),
+  const el=id=>{if(!nodes.has(id)){const e={id,value:'',textContent:'',innerHTML:'',hidden:true,disabled:false,listeners:{},style:{},dataset:{},attrs:{},classes:new Set(),
     classList:{add:c=>e.classes.add(c),remove:c=>e.classes.delete(c),toggle:(c,on)=>{(on===undefined?!e.classes.has(c):on)?e.classes.add(c):e.classes.delete(c);}},
     setAttribute(k,v){e.attrs[k]=String(v);},removeAttribute(k){delete e.attrs[k];},getAttribute(k){return e.attrs[k]??null;},
-    addEventListener(t,fn){e.listeners[t]=fn;},focus(){},scrollIntoView(){},add(){},closest(){return null;}};nodes.set(id,e);}return nodes.get(id);};
+    addEventListener(t,fn){e.listeners[t]=fn;},focus(){},scrollIntoView(){},add(){},replaceChildren(){},append(){},closest(){return null;}};nodes.set(id,e);}return nodes.get(id);};
   class Element{}
   const target=closest=>Object.assign(new Element(),{closest});
   const ctx=vm.createContext({Date:FakeDate,Element,Option:function(){},URLSearchParams,console,
     setTimeout:(fn,ms)=>{const t={fn,at:clock+ms};timers.push(t);return t;},clearTimeout:t=>{const i=timers.indexOf(t);if(i>=0)timers.splice(i,1);},setInterval(){},clearInterval(){},
     localStorage:{getItem(){return null},setItem(){}},confirm(){prompts++;return answersQueue.length?answersQueue.shift():false;},window:{scrollTo(){}},
-    document:{addEventListener(t,fn){if(t==='keydown')keydown=fn;},getElementById:el,querySelector:()=>null,querySelectorAll:()=>[],createElement:()=>el('created')}});
+    document:{addEventListener(t,fn){if(t==='keydown')keydown=fn;},getElementById:el,querySelector:sel=>el('qs:'+sel),querySelectorAll:()=>[],createElement:()=>el('created')}});
   vm.runInContext(fs.readFileSync('public/app.js','utf8'),ctx);
   const run=code=>vm.runInContext(code,ctx);
   ctx.__api=(path,opts)=>{apiCalls.push(path);return apiImpl(path,opts);};
@@ -105,5 +105,40 @@ const idx=h=>h.run('STATE.quiz.index'),answers=h=>JSON.parse(h.run('JSON.stringi
   h.setApi(async p=>p==='/api/quiz/answers'?{success:true,summary:'ok',evaluation:{},wrongCards:[],stats:{}}:{});
   h.key('Enter');await new Promise(r=>setImmediate(r));
   assert.equal(h.run('STATE.quiz'),null,'Retry after a cancelled quit succeeds');
-  console.log('Quiz guard VM tests passed: 600ms boundary on a controlled clock, repeat keys, focused controls, quit/retry while saving.');
+  // 6. オフライン: AWS はオフライン用の保存の対象外。「問題がない」「弱点がない」と誤表示せず、接続が必要と伝える。オンラインに戻れば出題できる
+  const WRONG_MESSAGES = /弱点分野はまだありません|出題できる問題がありません|オフライン用の問題がありません|復習期限が来た問題はありません/;
+  for (const quiz of [{ exam: 'aws-saa', mode: 'weak', count: 10 }, { exam: 'aws-clf', mode: 'review', count: 10 }, { exam: 'aws', mode: 'mix', count: 10 }]) {
+    h = harness();h.run('switchTab=()=>{}');h.run('STATE.offline=true');
+    h.ctx.__quiz = quiz;
+    await h.run("startQuizRun({ type: '一問一答', category: 'aws', title: 'AWS offline', quiz: __quiz })");
+    assert.equal(h.run('STATE.quiz'), null, `${quiz.exam}/${quiz.mode}: オフラインでは始めない`);
+    assert(h.toasts.some(m => /AWSの問題はオフラインでは使えません/.test(m) && /オンライン/.test(m)), 'オンライン接続が必要と伝える');
+    assert(!h.toasts.some(m => WRONG_MESSAGES.test(m)), `${quiz.exam}/${quiz.mode}: 「問題がない」「弱点がない」と誤表示しない`);
+    assert.equal(h.apiCalls.length, 0, 'オフライン中はAPIを呼ばない');
+  }
+  // 通信に失敗してオフラインへ切り替わった場合も同じ（保存した問題での続行や誤表示をしない）
+  h = harness();h.run('switchTab=()=>{}');h.run('STATE.offline=false');
+  h.setApi(async () => { throw new Error('network down'); });
+  h.ctx.__quiz = { exam: 'aws-saa', mode: 'weak', count: 10 };
+  await h.run("startQuizRun({ type: '一問一答', category: 'aws', title: 'AWS net down', quiz: __quiz })");
+  assert.equal(h.run('STATE.quiz'), null);
+  assert.equal(h.run('STATE.offline'), true, '通信失敗でオフライン状態になる');
+  assert(h.toasts.some(m => /AWSの問題はオフラインでは使えません/.test(m)));
+  assert(!h.toasts.some(m => WRONG_MESSAGES.test(m)));
+  // オンラインに戻ったら、同じ操作で出題できる
+  h.run('STATE.offline=false');
+  h.setApi(async path => path.startsWith('/api/quiz/deck') ? { cards: JSON.parse(JSON.stringify(h.ctx.__cards || [])) } : {});
+  h.ctx.__cards = Array.from({ length: 2 }, (_, i) => ({ id: `aws-saa-d1-0${i + 1}`, family: 'aws', question: `Q${i}`, answer: `A${i}`, explanation: 'e', url: 'https://docs.aws.amazon.com/', sources: ['https://docs.aws.amazon.com/'], sourceKind: 'docs', checkedAt: '2026-10-22', sourceLabel: 'S', topic: 'T', field: 'F' }));
+  await h.run("startQuizRun({ type: '一問一答', category: 'aws', title: 'AWS back online', quiz: __quiz })");
+  assert.notEqual(h.run('STATE.quiz'), null, 'オンラインに戻れば出題できる');
+  assert.equal(h.run('STATE.quiz.cards.length'), 2);
+  assert(h.apiCalls.some(p => p.startsWith('/api/quiz/deck')));
+  // IPA のオフライン動作（保存した問題）は変えない: AWS 以外は従来の案内のまま
+  h = harness();h.run('switchTab=()=>{}');h.run('STATE.offline=true');
+  h.ctx.__quiz = { exam: 'all', mode: 'mix', count: 10 };
+  await h.run("startQuizRun({ type: '一問一答', category: 'sc', title: 'IPA offline', quiz: __quiz })");
+  assert(h.toasts.some(m => /オフライン用の問題がありません/.test(m)), 'IPAは従来の案内');
+  assert(!h.toasts.some(m => /AWSの問題はオフラインでは使えません/.test(m)));
+
+  console.log('Quiz guard VM tests passed: 600ms boundary on a controlled clock, repeat keys, focused controls, quit/retry while saving, AWS offline guidance and recovery.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

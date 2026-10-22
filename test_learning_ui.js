@@ -108,7 +108,7 @@ const {QUIZ_CARDS}=require('./lib/content');
       await page.locator('#btnQuizRight').click();
       await page.locator('#btnQuizNext').click(); // waits until Next is enabled
       assert.equal(await page.evaluate(()=>loadPendingResults().length),1);
-      await page.evaluate(async()=>{STATE.offline=false;await flushPendingQuizResults();});
+      await page.evaluate(async()=>{STATE.offline=false;updateOfflineUi();await flushPendingQuizResults();}); // same steps as the real 'online' handler
       assert.equal(await page.evaluate(()=>loadPendingResults().length),0);
       assert.equal((await storage.load()).quizProgress[offlineCard.id].wrong,1);
       // Actual official question and original pixels, at both screen sizes.
@@ -196,6 +196,40 @@ const {QUIZ_CARDS}=require('./lib/content');
       assert.match(await page.locator('#nwExercise .nw-viewer').first().textContent(),/画像を読み込めませんでした/);
       assert(await page.locator('#nwExercise .nw-viewer').first().locator('p.field-hint').isVisible());
       assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'No page-wide overflow');
+      // 分野: 旧3分野は選べず、AWS を選ぶとコース選択が出る。AWS も「答えを見る→自己判定」で、答えだけでは記録されない。
+      await page.evaluate(()=>{switchTab('quest');});
+      const pickerState=await page.evaluate(()=>({tab:STATE.activeTab,offline:STATE.offline,filterBarHidden:document.querySelector('.filter-bar').hidden}));
+      assert.deepEqual(pickerState,{tab:'quest',offline:false,filterBarHidden:false},'The field picker is visible when online: '+JSON.stringify(pickerState));
+      assert.deepEqual(await page.locator('#catPills .pill').allTextContents(),['すべて','ネットワーク','支援士','AWS']);
+      assert.equal(await page.locator('#awsCourseGroup').isVisible(),false);
+      await page.locator('#catPills').getByRole('button',{name:'AWS',exact:true}).click();
+      await page.locator('#awsCourseGroup').waitFor({state:'visible'});
+      // wait for the recommendation request started by the click, so it cannot replace the quiz started below
+      await page.waitForFunction(()=>STATE.currentQuest && STATE.currentQuest.category==='aws' && !document.getElementById('btnStartHero').disabled);
+      assert.equal(await page.locator('#awsCoursePills .pill').count(),4);
+      assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'No page-wide overflow on the field picker');
+      await page.evaluate(()=>{STATE.quiz=null;document.getElementById('quizRunCard').hidden=true;document.getElementById('completionBanner').hidden=true;});
+      const awsSavesBefore=quizSaves;
+      await page.evaluate(()=>startQuizRun({type:'一問一答',category:'aws',title:'AWS regression',quiz:{exam:'aws-clf',count:2,format:'self'},decisionSource:'manual'}));
+      assert.equal(await page.evaluate(()=>STATE.quiz.cards.every(c=>c.exam==='aws-clf'&&!c.choices)),true,'AWS cards are recall cards, not graded choices');
+      await page.locator('#btnQuizReveal').click();
+      assert.equal(await page.evaluate(()=>STATE.quiz.answers.length),0,'Showing the AWS answer records nothing');
+      assert.match(await page.locator('#quizSourceLink').textContent(),/AWS公式/);
+      await page.locator('#btnQuizRight').click();
+      await page.locator('#btnQuizNext').click(); // waits until Next is enabled
+      await page.locator('#btnQuizReveal').click();
+      await page.locator('#btnQuizWrong').click();
+      await page.locator('#btnQuizNext').click();
+      await page.waitForFunction(()=>STATE.quiz===null);
+      assert.equal(quizSaves-awsSavesBefore,1,'One save for the AWS run');
+      const awsStored=await storage.load();
+      assert.equal(awsStored.history.find(h=>h.title==='AWS regression').category,'aws');
+      assert.equal(Object.keys(awsStored.quizProgress).filter(id=>id.startsWith('aws-clf-')).length,2);
+      await page.evaluate(()=>switchTab('library'));
+      await page.locator('#awsCourseGrid .aws-course').first().waitFor();
+      assert.equal(await page.locator('#awsCourseGrid .aws-course').count(),3);
+      assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'No page-wide overflow on the AWS course card');
+      await page.evaluate(()=>switchTab('quest'));
       // Real keys: Space/Y/N, held (repeat:true) keys, and Enter on a focused link must not skip or double-judge.
       await page.evaluate(()=>{STATE.quiz=null;document.getElementById('quizRunCard').hidden=true;document.getElementById('completionBanner').hidden=true;});
       await page.evaluate(()=>startQuizRun({type:'一問一答',category:'sc',title:'Keys regression',quiz:{exam:'sc',count:2,format:'self'},decisionSource:'manual'}));
