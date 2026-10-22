@@ -2,7 +2,7 @@
 
 [English](README.md) | [日本語](README.ja.md)
 
-A learning web application where Jev selects one task based on available time and mood, then evaluates understanding and review needs. It supports Network Specialist and Registered Information Security Specialist exam preparation and AWS study (Cloud Practitioner, SAA, SAP). The former AI, cloud and security reading fields are archived: their data is kept but they no more appear in the app. AWS questions are online-only (they are not part of the offline question cache). See [AWS courses and field cleanup](docs/aws-courses.md).
+A learning web application where Jev selects one task based on available time and mood, then evaluates understanding and review needs. It supports Network Specialist and Registered Information Security Specialist exam preparation, plus AWS and GCP certification flashcards from foundational AI through advanced courses. The former AI, cloud and security reading fields are archived: their data is kept but they no longer appear in the app. Cloud certification questions are online-only. See [certification courses and official exam guides](docs/cloud-courses.md) and [AWS courses and field cleanup](docs/aws-courses.md).
 
 ## Learning flow
 

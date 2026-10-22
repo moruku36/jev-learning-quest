@@ -1,6 +1,7 @@
 // Code-only regression for the quiz self-judge guards. A controllable clock and timer queue make the
 // 600ms boundary exact; real-browser timing, focus and layout stay with test_learning_ui.js.
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const { GCP_CARDS } = require('./lib/content');
 function harness(){
   const answersQueue=[],nodes=new Map(),timers=[],toasts=[],apiCalls=[];let clock=1_000_000,prompts=0,keydown=null,apiImpl=async()=>({});
   class FakeDate extends Date{static now(){return clock;}}
@@ -40,6 +41,17 @@ const idx=h=>h.run('STATE.quiz.index'),answers=h=>JSON.parse(h.run('JSON.stringi
   h.advance(20);assert.equal(next.disabled,false);assert.equal(h.el('quizNextLabel').textContent,'次へ');
   h.key('Enter');assert.equal(idx(h),1,'After the window Enter advances exactly one card');
   assert.equal(h.el('btnQuizRight').disabled,false,'The next card re-enables the judge buttons');
+
+  // 公開ガイドを根拠にしたGCPカードも、同じ「答えを見る→自己判定→次へ」で進む。
+  h=harness();h.ctx.__gcpCards=GCP_CARDS.slice(0,2);
+  h.run("STATE.quiz={quest:{title:'GCP',category:'gcp',decisionSource:'manual'},cards:__gcpCards,index:0,answers:[],startedAt:Date.now(),saving:false,format:'self',confidence:null};setHidden('quizRunCard',false);renderQuizCard()");
+  assert.equal(h.el('quizAnswerBox').hidden,true);
+  assert.match(h.el('quizSourceLink').textContent,/Google Cloud公式/);
+  assert.equal(h.el('quizSourceNote').hidden,false);
+  h.key(' ');assert.equal(h.el('quizAnswerBox').hidden,false);
+  assert.equal(h.el('quizAnswer').textContent,GCP_CARDS[0].answer);
+  h.key('y');h.advance(700);h.key('Enter');
+  assert.equal(idx(h),1);
 
   // 2. Space / Y / N with repeat:true (held keys) never reveal, judge or advance.
   h=harness();h.start(2);
@@ -107,12 +119,12 @@ const idx=h=>h.run('STATE.quiz.index'),answers=h=>JSON.parse(h.run('JSON.stringi
   assert.equal(h.run('STATE.quiz'),null,'Retry after a cancelled quit succeeds');
   // 6. オフライン: AWS はオフライン用の保存の対象外。「問題がない」「弱点がない」と誤表示せず、接続が必要と伝える。オンラインに戻れば出題できる
   const WRONG_MESSAGES = /弱点分野はまだありません|出題できる問題がありません|オフライン用の問題がありません|復習期限が来た問題はありません/;
-  for (const quiz of [{ exam: 'aws-saa', mode: 'weak', count: 10 }, { exam: 'aws-clf', mode: 'review', count: 10 }, { exam: 'aws', mode: 'mix', count: 10 }]) {
+  for (const quiz of [{ exam: 'aws-saa', mode: 'weak', count: 10 }, { exam: 'aws-clf', mode: 'review', count: 10 }, { exam: 'aws', mode: 'mix', count: 10 }, { exam: 'gcp-gai', mode: 'mix', count: 10 }, { exam: 'gcp', mode: 'review', count: 10 }]) {
     h = harness();h.run('switchTab=()=>{}');h.run('STATE.offline=true');
     h.ctx.__quiz = quiz;
-    await h.run("startQuizRun({ type: '一問一答', category: 'aws', title: 'AWS offline', quiz: __quiz })");
+    await h.run("startQuizRun({ type: '一問一答', category: __quiz.exam.startsWith('gcp') ? 'gcp' : 'aws', title: 'Cloud offline', quiz: __quiz })");
     assert.equal(h.run('STATE.quiz'), null, `${quiz.exam}/${quiz.mode}: オフラインでは始めない`);
-    assert(h.toasts.some(m => /AWSの問題はオフラインでは使えません/.test(m) && /オンライン/.test(m)), 'オンライン接続が必要と伝える');
+    assert(h.toasts.some(m => /AWS・GCPの問題はオフラインでは使えません/.test(m) && /オンライン/.test(m)), 'オンライン接続が必要と伝える');
     assert(!h.toasts.some(m => WRONG_MESSAGES.test(m)), `${quiz.exam}/${quiz.mode}: 「問題がない」「弱点がない」と誤表示しない`);
     assert.equal(h.apiCalls.length, 0, 'オフライン中はAPIを呼ばない');
   }
@@ -123,7 +135,7 @@ const idx=h=>h.run('STATE.quiz.index'),answers=h=>JSON.parse(h.run('JSON.stringi
   await h.run("startQuizRun({ type: '一問一答', category: 'aws', title: 'AWS net down', quiz: __quiz })");
   assert.equal(h.run('STATE.quiz'), null);
   assert.equal(h.run('STATE.offline'), true, '通信失敗でオフライン状態になる');
-  assert(h.toasts.some(m => /AWSの問題はオフラインでは使えません/.test(m)));
+  assert(h.toasts.some(m => /AWS・GCPの問題はオフラインでは使えません/.test(m)));
   assert(!h.toasts.some(m => WRONG_MESSAGES.test(m)));
   // オンラインに戻ったら、同じ操作で出題できる
   h.run('STATE.offline=false');
@@ -138,7 +150,7 @@ const idx=h=>h.run('STATE.quiz.index'),answers=h=>JSON.parse(h.run('JSON.stringi
   h.ctx.__quiz = { exam: 'all', mode: 'mix', count: 10 };
   await h.run("startQuizRun({ type: '一問一答', category: 'sc', title: 'IPA offline', quiz: __quiz })");
   assert(h.toasts.some(m => /オフライン用の問題がありません/.test(m)), 'IPAは従来の案内');
-  assert(!h.toasts.some(m => /AWSの問題はオフラインでは使えません/.test(m)));
+  assert(!h.toasts.some(m => /AWS・GCPの問題はオフラインでは使えません/.test(m)));
 
-  console.log('Quiz guard VM tests passed: 600ms boundary on a controlled clock, repeat keys, focused controls, quit/retry while saving, AWS offline guidance and recovery.');
+  console.log('Quiz guard VM tests passed: 600ms boundary, GCP reveal/next, repeat keys, focused controls, quit/retry, cloud offline guidance.');
 })().catch(e=>{console.error(e);process.exitCode=1;});
