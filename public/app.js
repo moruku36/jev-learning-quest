@@ -1233,10 +1233,21 @@ function initQuiz() {
     .forEach(r => reasonSelect.add(new Option(r, r)));
 }
 
+// AWS の問題はオフライン用の保存（最大60問）の対象外。オフラインでは「問題がない」ではなく接続が必要と伝える
+const AWS_OFFLINE_MESSAGE = 'AWSの問題はオフラインでは使えません。オンラインに接続してからもう一度開いてください';
+function isAwsExam(exam) {
+  return typeof exam === 'string' && (exam === 'aws' || exam.startsWith('aws-'));
+}
+
 async function startQuizRun(quest) {
   const previousRequestId = STATE.questRequestId;
   const quiz = { format: preferredQuizFormat(), ...(quest.quiz || {}) };
+  const awsRun = isAwsExam(quiz.exam);
   let cards;
+  if (STATE.offline && awsRun) {
+    showToast(AWS_OFFLINE_MESSAGE, 'warn');
+    return;
+  }
   if (STATE.offline) {
     cards = offlineDeckCards(quiz);
   } else {
@@ -1245,8 +1256,12 @@ async function startQuizRun(quest) {
       const data = await api(`/api/quiz/deck?${params}`);
       cards = data.cards || [];
     } catch (err) {
-      // 通信できないときは保存しておいた問題で続ける
+      // 通信できないときは保存しておいた問題で続ける（AWS は保存の対象外なので、接続が必要と伝える）
       enterOfflineMode();
+      if (awsRun) {
+        showToast(AWS_OFFLINE_MESSAGE, 'warn');
+        return;
+      }
       cards = offlineDeckCards(quiz);
     }
   }
@@ -1289,10 +1304,30 @@ function renderQuizCard() {
   document.getElementById('quizExplanation').textContent=card.explanation || 'この教材には解説本文は収録されていません。出典リンクで根拠を確認してください。';
   document.getElementById('quizSourceLink').href = card.url;
   const isAws = card.family === 'aws';
-  document.getElementById('quizSourceLink').textContent = isAws ? 'AWS公式ドキュメントで確認する ↗' : '元の過去問と解説を見る ↗';
+  // aws.amazon.com は「公式サイト」、docs.aws.amazon.com は「公式ドキュメント」と表記を分ける
+  document.getElementById('quizSourceLink').textContent = isAws
+    ? `AWS${card.sourceKind === 'site' ? '公式サイト' : '公式ドキュメント'}で確認する ↗`
+    : '元の過去問と解説を見る ↗';
   const sourceNote = document.getElementById('quizSourceNote');
   sourceNote.textContent = isAws ? `オリジナル問題（公式問題ではありません）・${card.checkedAt} 確認` : '';
   sourceNote.hidden = !isAws;
+  // 回答・解説が複数の公式資料に基づく問題は、ほかの根拠も並べる
+  const more = document.getElementById('quizMoreSources');
+  more.replaceChildren();
+  const others = (card.sources || []).slice(1);
+  if (isAws && others.length) {
+    more.append('ほかの根拠: ');
+    others.forEach((href, i) => {
+      const a = document.createElement('a');
+      a.className = 'run-link';
+      a.href = href;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.textContent = `${i + 1} ↗`;
+      more.append(a, ' ');
+    });
+  }
+  more.hidden = !(isAws && others.length);
   document.getElementById('quizReportNote').value = '';
   document.getElementById('quizMistakeReason').value = '';
   document.querySelectorAll('#quizConfidence .confidence-choice').forEach(btn => {
@@ -1801,7 +1836,7 @@ function startAwsQuiz(exam, label, mode, count = 10) {
     quiz: { exam, mode, count },
     reason: mode === 'review'
       ? '覚えていなかった問題と、忘れかける頃の問題を出し直して記憶を定着させます。'
-      : 'AWS公式ドキュメントを根拠にしたオリジナル問題で、サービスの使い分けと設計判断を確認します。',
+      : 'AWS公式資料を根拠にしたオリジナル問題で、サービスの使い分けと基本的な設計を思い出して確認します。',
     criteria: '答えを見る前に自分の答えを思い出し、「覚えていた／覚えていない」を正直に選ぶこと。',
     decisionSource: 'manual'
   });
@@ -2022,7 +2057,7 @@ function updateOfflineUi() {
     const pending = loadPendingResults().length;
     const left = offlineDeckCards({ exam: 'all', count: OFFLINE_DECK_SIZE }).length;
     document.getElementById('offlineBannerText').textContent =
-      `保存しておいた一問一答（残り${left}問）を解けます。` +
+      `保存しておいた一問一答（残り${left}問）を解けます。AWSの問題はオフラインでは使えません（オンライン接続が必要です）。` +
       (pending ? `送信待ちの結果が${pending}回分あり、オンラインに戻ると自動で保存されます。` : '結果は次にオンラインになったときに自動で保存されます。');
   }
 }

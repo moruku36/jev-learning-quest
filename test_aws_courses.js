@@ -13,9 +13,9 @@ const { ACTIVE_CATEGORIES, ARCHIVED_CATEGORIES } = require('./lib/categories');
 
 // ---- 1. 問題データの整合性（件数・領域配分・出典・表記）----
 const EXPECTED = {
-  clf: { examCode: 'CLF-C02', counts: { d1: 8, d2: 12, d3: 14, d4: 4 }, weights: { d1: 24, d2: 30, d3: 34, d4: 12 } },
-  saa: { examCode: 'SAA-C03', counts: { d1: 12, d2: 10, d3: 10, d4: 8 }, weights: { d1: 30, d2: 26, d3: 24, d4: 20 } },
-  sap: { examCode: 'SAP-C02', counts: { d1: 8, d2: 9, d3: 8, d4: 7 }, weights: { d1: 26, d2: 29, d3: 25, d4: 20 } }
+  clf: { examCode: 'CLF-C02', counts: { d1: 8, d2: 12, d3: 14, d4: 5 }, weights: { d1: 24, d2: 30, d3: 34, d4: 12 } },
+  saa: { examCode: 'SAA-C03', counts: { d1: 10, d2: 10, d3: 8, d4: 6 }, weights: { d1: 30, d2: 26, d3: 24, d4: 20 } },
+  sap: { examCode: 'SAP-C02', counts: { d1: 7, d2: 9, d3: 7, d4: 7 }, weights: { d1: 26, d2: 29, d3: 25, d4: 20 } }
 };
 assert.deepEqual(AWS_COURSES.map(c => c.id), ['clf', 'saa', 'sap']);
 for (const course of AWS_COURSES) {
@@ -28,9 +28,10 @@ for (const course of AWS_COURSES) {
     assert.equal(cards.filter(c => c.domain === d.id).length, exp.counts[d.id], `${course.id} ${d.id} の問題数`);
   }
   assert(cards.length >= 30, `${course.id}: 実際に学べる規模`);
+  assert(cards.every(c => c.sources.length >= 1 && c.sources[0] === c.url));
   assert(/^https:\/\/docs\.aws\.amazon\.com\/aws-certification\/latest\//.test(course.guideUrl), '試験ガイドはAWS公式');
 }
-assert.equal(AWS_CARDS.length, 110);
+assert.equal(AWS_CARDS.length, 103);
 assert.match(AWS_COURSES.find(c => c.id === 'sap').notice, /SAP-C03/, '次期試験は注記にとどめ、現行コードで作る');
 assert(!AWS_COURSES.some(c => /C03/.test(c.examCode) && c.id === 'sap'));
 
@@ -55,8 +56,51 @@ for (const id of ['saa', 'sap']) {
   const cards = AWS_CARDS.filter(c => c.course === id);
   assert(cards.filter(c => c.kind === 'scenario').length / cards.length >= 0.7, `${id}: 状況設計型の割合`);
 }
+// 近似重複（同じ答えの問題）と欠番: IDは詰めず、削除しても学習済みの問題のIDが変わらない
+const answers = new Map();
+for (const c of AWS_CARDS) {
+  const key = c.answer.replace(/[\s。、]/g, '');
+  assert(!answers.has(key), `答えが同一の近似重複: ${c.id} と ${answers.get(key)}`);
+  answers.set(key, c.id);
+}
+const removed = ['aws-saa-d1-06', 'aws-saa-d3-01', 'aws-saa-d3-03', 'aws-saa-d4-06', 'aws-saa-d4-07', 'aws-saa-d1-08', 'aws-sap-d1-08', 'aws-sap-d3-03'];
+for (const id of removed) assert(!AWS_CARDS.some(c => c.id === id), `${id} は近似重複のため出題しない`);
+assert(AWS_CARDS.some(c => c.id === 'aws-saa-d4-08' && c.question), '欠番があっても後続のIDは変わらない');
+// 公式サイトと公式ドキュメントの表記: aws.amazon.com は site、docs.aws.amazon.com は docs
+for (const c of AWS_CARDS) {
+  for (const u of c.sources) assert.match(u, /^https:\/\/(docs\.aws\.amazon\.com|aws\.amazon\.com)\//, `${c.id}: 根拠はAWS公式`);
+  assert.equal(c.sourceKind, new URL(c.url).hostname === 'docs.aws.amazon.com' ? 'docs' : 'site', c.id);
+}
+// 解答に必要な前提を問題文に明示する（レビュー指摘の5問）。前提が変わると答えが変わる問題は、解説で代替案を示す
+const byId = id => AWS_CARDS.find(c => c.id === id);
+const mustMention = {
+  'aws-saa-d2-06': { q: [/マルチAZ/, /データセンター（AZ）の障害/, /RTO・RPO/], e: [/リージョン全体の障害/, /パイロットライト/] },
+  'aws-sap-d1-07': { q: [/コストと複雑さが低い順/], e: [/RTO・RPO/, /リージョン障害/] },
+  'aws-sap-d2-09': { q: [/非同期/, /アプリ改修/], e: [/前提が成り立たない/, /インスタンスクラス/, /DynamoDB/] },
+  'aws-sap-d2-04': { q: [/RPO/, /RTO/, /Aurora（MySQL互換またはPostgreSQL互換）/], e: [/Aurora以外のエンジン/, /リードレプリカ/, /DynamoDB/] },
+  'aws-saa-d3-05': { q: [/繰り返しの読み取り/, /多少古いデータ/, /アプリにキャッシュ/], e: [/リードレプリカ/, /DAX/, /CloudFront/] }
+};
+for (const [id, need] of Object.entries(mustMention)) {
+  const c = byId(id);
+  assert(c, id);
+  for (const re of need.q) assert.match(c.question, re, `${id}: 問題文に前提を明示`);
+  for (const re of need.e) assert.match(c.explanation, re, `${id}: 解説に代替案・前提の違いを示す`);
+}
+assert(byId('aws-saa-d3-05').sources.length >= 3 && byId('aws-sap-d2-09').sources.length >= 3 && byId('aws-saa-d2-08').sources.length >= 2, '代替案の根拠も挙げる');
+// 数値の暗記に依存させない（条件つきの数値を答え・解説に置かない）
+for (const id of ['aws-sap-d4-02', 'aws-saa-d3-07', 'aws-clf-d4-03', 'aws-clf-d4-05', 'aws-saa-d4-02']) {
+  const c = byId(id);
+  assert(!/\d+\s*(日|か月|TiB|TB)/.test(`${c.question}${c.answer}${c.explanation}`), `${id}: 条件つきの数値に依存しない`);
+}
+// SAP を必要以上に難しい演習と宣伝しない
+const sapCourse = AWS_COURSES.find(c => c.id === 'sap');
+assert(/本番形式の演習ではありません/.test(sapCourse.notice) && /想起/.test(sapCourse.notice));
+const sapSource = fs.readFileSync(path.join(__dirname, 'lib/content/aws/sap-c02.js'), 'utf8')
+  .split(/\r?\n/).filter(l => !l.startsWith('//')).join('\n');
+assert(!/トレードオフを(問う|答える)/.test(sapSource));
+
 // 旧IPA問題IDと衝突しない
-assert.equal(QUIZ_CARDS.length, 1050 + 110);
+assert.equal(QUIZ_CARDS.length, 1050 + 103);
 assert.equal(QUIZ_CARD_MAP.size, QUIZ_CARDS.length);
 assert(AWS_CARDS.every(c => !/^(sc|ap)-/.test(c.id)));
 
@@ -113,8 +157,8 @@ assert(pills.length > 0);
     assert.equal(c0.quiz.stats.all.total, 1050, '従来の集計（IPA）は変わらない');
     assert.equal(c0.quiz.stats.all.studied, 1);
     assert.equal(c0.aws.courses.length, 3);
-    assert.deepEqual(c0.aws.courses.map(c => c.stats.total), [38, 40, 32]);
-    assert.equal(c0.aws.stats.total, 110);
+    assert.deepEqual(c0.aws.courses.map(c => c.stats.total), [39, 34, 30]);
+    assert.equal(c0.aws.stats.total, 103);
     assert(c0.aws.courses.every(c => c.fields.length === 4 && c.domains.length === 4));
     const h0 = (await call('/api/history')).data;
     assert(!h0.history.some(h => ARCHIVED_CATEGORIES.includes(h.category)), '履歴一覧に旧分野は出ない');
