@@ -108,7 +108,7 @@ const {QUIZ_CARDS}=require('./lib/content');
       await page.locator('#btnQuizRight').click();
       await page.locator('#btnQuizNext').click(); // waits until Next is enabled
       assert.equal(await page.evaluate(()=>loadPendingResults().length),1);
-      await page.evaluate(async()=>{STATE.offline=false;await flushPendingQuizResults();});
+      await page.evaluate(async()=>{STATE.offline=false;updateOfflineUi();await flushPendingQuizResults();}); // same steps as the real 'online' handler
       assert.equal(await page.evaluate(()=>loadPendingResults().length),0);
       assert.equal((await storage.load()).quizProgress[offlineCard.id].wrong,1);
       // Actual official question and original pixels, at both screen sizes.
@@ -198,10 +198,14 @@ const {QUIZ_CARDS}=require('./lib/content');
       assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'No page-wide overflow');
       // 分野: 旧3分野は選べず、AWS を選ぶとコース選択が出る。AWS も「答えを見る→自己判定」で、答えだけでは記録されない。
       await page.evaluate(()=>{switchTab('quest');});
+      const pickerState=await page.evaluate(()=>({tab:STATE.activeTab,offline:STATE.offline,filterBarHidden:document.querySelector('.filter-bar').hidden}));
+      assert.deepEqual(pickerState,{tab:'quest',offline:false,filterBarHidden:false},'The field picker is visible when online: '+JSON.stringify(pickerState));
       assert.deepEqual(await page.locator('#catPills .pill').allTextContents(),['すべて','ネットワーク','支援士','AWS']);
       assert.equal(await page.locator('#awsCourseGroup').isVisible(),false);
       await page.locator('#catPills').getByRole('button',{name:'AWS',exact:true}).click();
       await page.locator('#awsCourseGroup').waitFor({state:'visible'});
+      // wait for the recommendation request started by the click, so it cannot replace the quiz started below
+      await page.waitForFunction(()=>STATE.currentQuest && STATE.currentQuest.category==='aws' && !document.getElementById('btnStartHero').disabled);
       assert.equal(await page.locator('#awsCoursePills .pill').count(),4);
       assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'No page-wide overflow on the field picker');
       await page.evaluate(()=>{STATE.quiz=null;document.getElementById('quizRunCard').hidden=true;document.getElementById('completionBanner').hidden=true;});
