@@ -86,6 +86,7 @@ for (const [id, need] of Object.entries(mustMention)) {
   for (const re of need.q) assert.match(c.question, re, `${id}: 問題文に前提を明示`);
   for (const re of need.e) assert.match(c.explanation, re, `${id}: 解説に代替案・前提の違いを示す`);
 }
+assert(byId('aws-saa-d3-09').sources.length >= 3 && byId('aws-clf-d3-12').sources.length >= 3, 'Athena と VPN は本文を直接支える根拠ページも挙げる');
 assert(byId('aws-saa-d3-05').sources.length >= 3 && byId('aws-sap-d2-09').sources.length >= 3 && byId('aws-saa-d2-08').sources.length >= 2, '代替案の根拠も挙げる');
 // 数値の暗記に依存させない（条件つきの数値を答え・解説に置かない）
 for (const id of ['aws-sap-d4-02', 'aws-saa-d3-07', 'aws-clf-d4-03', 'aws-clf-d4-05', 'aws-saa-d4-02']) {
