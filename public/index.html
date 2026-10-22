@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Jev 学習クエスト</title>
-  <meta name="description" content="判断AI Jev が「今日やる1つ」を選ぶ、NW・支援士の試験対策と技術キャッチアップのための学習アプリ">
+  <meta name="description" content="判断AI Jev が「今日やる1つ」を選ぶ、NW・支援士・AWSの学習アプリ">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="manifest" href="manifest.webmanifest">
@@ -22,7 +22,7 @@
     <div class="auth-card">
       <span class="brand-logo auth-logo" aria-hidden="true">J</span>
       <h1 class="auth-title">Jev 学習クエスト</h1>
-      <p class="auth-sub">判断AI Jev が「今日やる1つ」を選ぶ、NW・支援士の試験対策 & 技術キャッチアップ</p>
+      <p class="auth-sub">判断AI Jev が「今日やる1つ」を選ぶ、NW・支援士・AWSの学習</p>
       <button class="btn btn-github btn-lg" id="btnLogin" type="button">
         <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
         GitHub でログイン
@@ -40,7 +40,7 @@
         <span class="brand-logo" aria-hidden="true">J</span>
         <div>
           <h1 class="brand-title">Jev 学習クエスト</h1>
-          <p class="brand-sub">判断AI Jev が「今日やる1つ」を選ぶ ─ NW・支援士の試験対策 & 技術キャッチアップ</p>
+          <p class="brand-sub">判断AI Jev が「今日やる1つ」を選ぶ ─ NW・支援士・AWSの学習</p>
         </div>
       </div>
       <div class="header-actions">
@@ -110,9 +110,16 @@
             <div class="pill-group" id="catPills">
               <button class="pill active" data-val="all">すべて</button>
               <button class="pill" data-val="nw">ネットワーク</button><button class="pill" data-val="sc">支援士</button>
-              <button class="pill" data-val="ai">AI</button>
-              <button class="pill" data-val="cloud">クラウド</button>
-              <button class="pill" data-val="security">セキュリティ</button>
+              <button class="pill" data-val="aws">AWS</button>
+            </div>
+          </div>
+          <div class="filter-group" id="awsCourseGroup" hidden>
+            <span class="filter-label">AWSコース</span>
+            <div class="pill-group" id="awsCoursePills">
+              <button class="pill active" data-val="all">すべて</button>
+              <button class="pill" data-val="clf">基礎 CLF-C02</button>
+              <button class="pill" data-val="saa">設計・中級 SAA-C03</button>
+              <button class="pill" data-val="sap">設計・上級 SAP-C02</button>
             </div>
           </div>
           <div class="filter-group">
@@ -121,7 +128,7 @@
               <button class="pill active" data-val="balance">おまかせ</button>
               <button class="pill" data-val="weakness">弱点をつぶす</button>
               <button class="pill" data-val="exercise">じっくり演習</button>
-              <button class="pill" data-val="input">サクッと情報収集</button>
+              <button class="pill" data-val="input">サクッと確認</button>
             </div>
           </div>
         </div>
@@ -235,7 +242,7 @@
         <div class="quest-run-card" id="quizRunCard" hidden>
           <div class="run-header">
             <div>
-              <span class="tag tag-cat">支援士</span>
+              <span class="tag tag-cat" id="quizCatTag">支援士</span>
               <span class="tag tag-type">一問一答</span>
               <h2 class="run-title" id="quizTitle">-</h2>
             </div>
@@ -265,6 +272,7 @@
               <p id="quizExplanation" class="field-hint"></p>
               <div class="quiz-answer-links">
                 <a class="run-link" id="quizSourceLink" href="#" target="_blank" rel="noopener noreferrer">元の過去問と解説を見る ↗</a>
+                <span class="field-hint" id="quizSourceNote" hidden></span>
                 <button class="link-btn" id="btnQuizReport" type="button">⚠ この問題おかしい？</button>
               </div>
               <div class="quiz-report-form" id="quizReportForm" hidden>
@@ -332,31 +340,7 @@
           <button class="btn btn-primary" id="btnCompNext">次のクエストへ</button>
         </div>
 
-        <div class="panel-header"><h2>技術を学ぶ</h2><p class="panel-sub">公式レポートと新着情報でキャッチアップ。試験演習は「試験問題」から選べます。</p></div>
-        <div class="card">
-          <div class="card-title-row">
-            <h3 class="card-heading">🤖 AI 大手のレポート・論文を読む</h3>
-            <span class="count-label" id="readingCount"></span>
-          </div>
-          <p class="text-desc">Anthropic・OpenAI・Google・Meta・Microsoft などが公開している一次情報です。読む観点とアウトプットが決まっているので、読んだら要点を書いて保存します。「できた」で保存すると読了になります。</p>
-          <div class="pill-group reading-filter" id="readingFilterPills">
-            <button class="pill active" data-val="todo">未読</button>
-            <button class="pill" data-val="all">すべて</button>
-            <button class="pill" data-val="done">読了</button>
-          </div>
-          <div class="reading-list" id="readingList"></div>
-        </div>
-
-        <div class="card">
-          <div class="card-title-row">
-            <h3 class="card-heading">🆕 AI の新着（公式ブログ・arXiv）</h3>
-            <span class="count-label" id="feedUpdated"></span>
-          </div>
-          <p class="text-desc">OpenAI・Google DeepMind・Google Research・Microsoft Security の公式ブログと、arXiv の「LLM × セキュリティ」の新着です（数時間ごとに更新）。気になる記事を開き、要点を確認できます。</p>
-          <div class="reading-list" id="feedList"><p class="text-muted">「学ぶ」で読み込みます</p></div>
-        </div>
-
-        <div class="card"><h3 class="card-heading">保存済み教材 <span class="count-label" id="itemCount"></span></h3><p class="text-desc">これまでの教材も学習候補に残っています。</p><div class="item-list" id="itemList"></div></div>
+        <div class="card" id="itemCard" hidden><h3 class="card-heading">保存済み教材 <span class="count-label" id="itemCount"></span></h3><p class="text-desc">これまでの教材も学習候補に残っています。</p><div class="item-list" id="itemList"></div></div>
       </section>
 
       <!-- ================= 1-b. 教材 ================= -->
@@ -438,6 +422,18 @@
           <button class="btn btn-primary" id="btnLibStartQuiz" type="button">▶ 一問一答を始める</button>
         </div>
 
+        <div class="card aws-card" id="awsCard">
+          <div class="card-title-row">
+            <h3 class="card-heading">☁️ AWS 一問一答（基礎・設計 中級・上級）</h3>
+            <span class="count-label" id="awsCount"></span>
+          </div>
+          <p class="text-desc">
+            AWS公式ドキュメントを根拠に作った、日本語のオリジナル問題です（公式問題ではなく、本番試験の形式や合格を保証するものでもありません）。
+            問題を見て思い出し、「答えを見る」で正解を確認して、「覚えていた／覚えていない」を自分で判定します。
+          </p>
+          <div class="aws-course-grid" id="awsCourseGrid"><p class="text-muted">読み込み中...</p></div>
+        </div>
+
         <div class="card exam-snapshot">
           <div class="card-title-row">
             <h3 class="card-heading">🗓️ 2026年度の試験準備</h3>
@@ -497,7 +493,7 @@
 
         <div class="card">
           <h3 class="card-heading">📈 学習の進み具合</h3>
-          <p class="text-desc">試験対策と技術キャッチアップを分けて表示します。</p>
+          <p class="text-desc">ネットワーク・支援士・AWSの進み具合を、コース・試験区分ごとに表示します。</p>
           <div class="learning-lanes" id="learningLanes"><p class="text-muted">読み込み中...</p></div>
         </div>
 
@@ -507,6 +503,14 @@
             <p class="text-desc" id="quizReviewText"></p>
           </div>
           <button class="btn btn-primary btn-sm" id="btnQuizReview" type="button">復習する</button>
+        </div>
+
+        <div class="card quiz-review-card" id="awsReviewCard" hidden>
+          <div>
+            <h3 class="card-heading">☁️ AWS 一問一答の復習</h3>
+            <p class="text-desc" id="awsReviewText"></p>
+          </div>
+          <div class="aws-review-buttons" id="awsReviewButtons"></div>
         </div>
 
         <div class="review-items-container" id="reviewItemsContainer"></div>

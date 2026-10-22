@@ -9,6 +9,7 @@ const STATE = {
   conditions: {
     minutes: 20,
     category: 'all',
+    awsCourse: 'all',
     goal: 'balance'
   },
   timer: {
@@ -21,17 +22,31 @@ const STATE = {
   mistakeReason: '読み落とし',
   // 一問一答の実行状態
   quiz: null,
-  library: null,
-  readingFilter: 'todo'
+  library: null
 };
 
+// 旧分野（AI・クラウド・セキュリティ）は、学習履歴などのデータには残すが画面・おすすめ・集計には出さない。
+// lib/categories.js の ARCHIVED_CATEGORIES と同じ内容にすること（test_aws_courses.js が一致を確認する）。
+const ARCHIVED_CATEGORIES = ['ai', 'cloud', 'security'];
+function isArchivedCategory(category) {
+  return ARCHIVED_CATEGORIES.includes(category);
+}
+
+// 名前は、過去の記録を表示するときに参照切れにならないよう旧分野も残している（分野の選択肢には出さない）
 const CATEGORY_NAMES = {
   nw: 'ネットワークスペシャリスト',
   sc: '支援士',
+  aws: 'AWS',
   ai: 'AI',
   cloud: 'クラウド',
   security: 'セキュリティ'
 };
+
+const AWS_COURSE_UI = [
+  { id: 'clf', exam: 'aws-clf', label: '基礎 CLF-C02' },
+  { id: 'saa', exam: 'aws-saa', label: '設計・中級 SAA-C03' },
+  { id: 'sap', exam: 'aws-sap', label: '設計・上級 SAP-C02' }
+];
 
 const SCORE_LABELS = ['-', '基礎から見直し', '要復習', '概ね理解', 'しっかり理解'];
 
@@ -308,6 +323,11 @@ function initFilterPills() {
   });
   setupPills('catPills', val => {
     STATE.conditions.category = val;
+    setHidden('awsCourseGroup', val !== 'aws');
+    loadRecommendedQuest();
+  });
+  setupPills('awsCoursePills', val => {
+    STATE.conditions.awsCourse = val;
     loadRecommendedQuest();
   });
   setupPills('goalPills', val => {
@@ -859,11 +879,13 @@ async function loadReviewList() {
     const [histData, itemData, contentData] = await Promise.all([
       api('/api/history'), api('/api/registered-items'), api('/api/content').catch(() => null)
     ]);
-    const history = histData.history || [];
-    const items = itemData.items || [];
+    // サーバーも旧分野を除いて返すが、古い画面や想定外の応答でも旧分野が復習・集計に再出現しないようここでも除く
+    const history = (histData.history || []).filter(h => !isArchivedCategory(h.category));
+    const items = (itemData.items || []).filter(i => !isArchivedCategory(i.category));
     const pending = history.filter(isPendingReview);
     renderQuizReviewCard(histData.quizStats);
-    renderLearningLanes(contentData, items, history);
+    renderAwsReviewCard(histData.courseStats);
+    renderLearningLanes(contentData);
 
     if (pending.length === 0) {
       container.innerHTML = '<div class="empty-state">🎉 再挑戦待ちの問題はありません</div>';
@@ -938,7 +960,7 @@ async function loadReviewList() {
   }
 }
 
-function renderLearningLanes(content, items, history) {
+function renderLearningLanes(content) {
   const host = document.getElementById('learningLanes');
   if (!content?.quiz?.stats) {
     host.innerHTML = '<p class="text-muted">進捗を読み込めませんでした。</p>';
@@ -948,27 +970,25 @@ function renderLearningLanes(content, items, history) {
   const sc = content.quiz.stats.sc;
   const written = content.written || [];
   const attemptedWritten = written.filter(w => w.attempted).length;
-  const techItems = items.filter(i => i.type === 'catchup' && ['ai', 'cloud', 'security'].includes(i.category));
-  const completedTechItems = techItems.filter(i => history.some(h => h.itemId === i.id && h.isCorrect)).length;
-  const readings = content.readings || [];
   const network = content.network || [];
+  const awsLanes = (content.aws?.courses || []).map(c => ({
+    name: `AWS ${c.examCode}（${c.level}）`,
+    done: c.stats.studied,
+    total: c.stats.total,
+    detail: `覚えていた定着 ${c.stats.mastered}問・復習待ち ${c.stats.due}問`
+  }));
   const lanes = [
     ...['am1','am2','pm1','pm2'].map(part=>{ const qs=network.filter(q=>q.part===part); return {name:`NW ${{am1:'午前Ⅰ',am2:'午前Ⅱ',pm1:'午後Ⅰ',pm2:'午後Ⅱ'}[part]}`,done:qs.filter(q=>q.attempted).length,total:qs.length,detail:`できた ${qs.filter(q=>q.done).length}・要復習 ${qs.filter(q=>q.attempted&&!q.done).length}`}; }),
     { name: '応用情報 午前 / 科目A-1', done: ap.studied, total: ap.total, detail: `定着 ${ap.mastered}問・復習待ち ${ap.due}問` },
     { name: '支援士 午前II / 科目A-2', done: sc.studied, total: sc.total, detail: `定着 ${sc.mastered}問・復習待ち ${sc.due}問` },
     { name: '支援士 記述 / 科目B', done: attemptedWritten, total: written.length, detail: '答案を書いて採点した問題' },
-    {
-      name: 'AI・クラウド・セキュリティ',
-      done: readings.filter(r => r.done).length + completedTechItems,
-      total: readings.length + techItems.length,
-      detail: '公式レポートと登録した記事'
-    }
+    ...awsLanes
   ];
   host.innerHTML = lanes.map(lane => `
     <div class="learning-lane">
-      <div class="learning-lane-name">${lane.name}</div>
+      <div class="learning-lane-name">${escapeHtml(lane.name)}</div>
       <div class="learning-lane-progress">${lane.done} / ${lane.total}</div>
-      <div class="learning-lane-detail">${lane.detail}</div>
+      <div class="learning-lane-detail">${escapeHtml(lane.detail)}</div>
     </div>`).join('');
 }
 
@@ -998,8 +1018,8 @@ async function updateReviewBadge() {
   try {
     const data = await api('/api/history');
     // 一問一答は「前回間違えて復習期限が来た問題」だけをバッジに数える
-    const quizWrongDue = data.quizStats ? data.quizStats.wrongDue : 0;
-    const pendingCount = (data.history || []).filter(isPendingReview).length + quizWrongDue;
+    const quizWrongDue = (data.quizStats ? data.quizStats.wrongDue : 0) + (data.awsStats ? data.awsStats.wrongDue : 0);
+    const pendingCount = (data.history || []).filter(h => !isArchivedCategory(h.category)).filter(isPendingReview).length + quizWrongDue;
     const badge = document.getElementById('reviewCountBadge');
     badge.textContent = pendingCount;
     badge.hidden = pendingCount === 0;
@@ -1010,10 +1030,11 @@ async function loadItemList() {
   const list = document.getElementById('itemList');
   try {
     const data = await api('/api/registered-items');
-    const items = data.items || [];
+    const items = (data.items || []).filter(i => !isArchivedCategory(i.category));
     document.getElementById('itemCount').textContent = `${items.length}件`;
+    setHidden('itemCard', items.length === 0);
     if (items.length === 0) {
-      list.innerHTML = '<p class="text-muted">まだ保存済み教材はありません。同梱教材から学習できます。</p>';
+      list.innerHTML = '';
       return;
     }
     list.innerHTML = items.map(i => `
@@ -1024,6 +1045,7 @@ async function loadItemList() {
       </div>
     `).join('');
   } catch (e) {
+    setHidden('itemCard', false);
     list.innerHTML = '<p class="text-muted">読み込みに失敗しました</p>';
   }
 }
@@ -1207,7 +1229,7 @@ function initQuiz() {
 
   // 報告理由の選択肢（サーバーの定義と同じ）
   const reasonSelect = document.getElementById('quizReportReason');
-  ['答えが間違っている', '問題文が分かりにくい', '元の過去問と内容が合っていない', 'その他']
+  ['答えが間違っている', '問題文が分かりにくい', '元の過去問と内容が合っていない', '公式資料と内容が合っていない', 'その他']
     .forEach(r => reasonSelect.add(new Option(r, r)));
 }
 
@@ -1248,6 +1270,7 @@ async function startQuizRun(quest) {
   setHidden('completionBanner', true);
   setHidden('quizRunCard', false);
   document.getElementById('quizTitle').textContent = quest.title;
+  document.getElementById('quizCatTag').textContent = categoryName(quest.category === 'aws' ? 'aws' : 'sc');
   renderQuizCard();
   document.getElementById('quizRunCard').scrollIntoView({ behavior: 'smooth' });
 }
@@ -1265,6 +1288,11 @@ function renderQuizCard() {
   document.getElementById('quizAnswerLabel').textContent = '正解';
   document.getElementById('quizExplanation').textContent=card.explanation || 'この教材には解説本文は収録されていません。出典リンクで根拠を確認してください。';
   document.getElementById('quizSourceLink').href = card.url;
+  const isAws = card.family === 'aws';
+  document.getElementById('quizSourceLink').textContent = isAws ? 'AWS公式ドキュメントで確認する ↗' : '元の過去問と解説を見る ↗';
+  const sourceNote = document.getElementById('quizSourceNote');
+  sourceNote.textContent = isAws ? `オリジナル問題（公式問題ではありません）・${card.checkedAt} 確認` : '';
+  sourceNote.hidden = !isAws;
   document.getElementById('quizReportNote').value = '';
   document.getElementById('quizMistakeReason').value = '';
   document.querySelectorAll('#quizConfidence .confidence-choice').forEach(btn => {
@@ -1500,10 +1528,11 @@ function renderQuizCompletion(data,quiz) {
     ? `復習: ${reviewParts.join('・')}` : '復習: 間隔をあけて再確認';
   document.getElementById('compSourceTag').textContent = ev.decisionSource === 'jev' ? '判定: 🧠 Jev (Score / Noul)'
     : ev.decisionSource === 'offline' ? '判定: 📴 オンライン復帰後に保存' : '判定: 📋 ルール';
-  const all = data.stats && data.stats.all;
+  const isAws = data.history?.category === 'aws';
+  const all = data.stats && (isAws ? data.stats.aws : data.stats.all);
   const weak = (data.weakFields || []).map(f => `${f.name}（${Math.round(f.accuracy * 100)}%）`).join('、');
   document.getElementById('compMessage').textContent = data.message || (all
-    ? `一問一答の学習済み: ${all.studied} / ${all.total}問（定着 ${all.mastered}問）。${weak ? `弱点分野: ${weak}。` : ''}⭕の問題も 3日後・7日後…と間隔をあけて再確認します。`
+    ? `${isAws ? 'AWS一問一答（全コース）' : '一問一答'}の学習済み: ${all.studied} / ${all.total}問（定着 ${all.mastered}問）。${weak ? `弱点の${isAws ? '領域' : '分野'}: ${weak}。` : ''}覚えていた問題も 3日後・7日後…と間隔をあけて再確認します。`
     : '');
   setHidden('compAnswerNotes', true);
   setHidden('compKeywordBox', true);
@@ -1513,6 +1542,7 @@ function renderQuizCompletion(data,quiz) {
     <li>
       <span class="wrong-q">${escapeHtml(c.question)}</span>
       <span class="wrong-a">→ ${escapeHtml(c.answer)}</span>
+      ${c.explanation ? `<span class="wrong-e">${escapeHtml(c.explanation)}</span>` : ''}
       <a href="${escapeHtml(c.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(c.sourceLabel)} ↗</a>
     </li>`).join('');
   setHidden('compWrongBox', data.wrongCards.length === 0);
@@ -1578,10 +1608,6 @@ function initLibrary() {
 
   document.getElementById('btnCopyReports').addEventListener('click', copyReports);
 
-  setupPills('readingFilterPills', val => {
-    STATE.readingFilter = val;
-    renderReadingList();
-  });
   setupPills('writtenFilterPills', val => {
     STATE.writtenFilter = val;
     renderWrittenList();
@@ -1622,12 +1648,11 @@ async function loadLibrary() {
 
     renderFieldStats(data.quiz.fields);
     renderReports(data.quiz.reports);
-    applyBarWidths();
     renderWrittenList();
     renderNetworkList();
-    renderReadingList();
+    renderAwsCourses(data.aws);
+    applyBarWidths();
     loadItemList();
-    loadAiFeed();
   } catch (e) {
     showToast('教材を読み込めませんでした', 'error');
   }
@@ -1764,90 +1789,80 @@ function renderWrittenList() {
   });
 }
 
-function renderReadingList() {
-  if (!STATE.library) return;
-  const readings = STATE.library.readings;
-  const doneCount = readings.filter(r => r.done).length;
-  document.getElementById('readingCount').textContent = `読了 ${doneCount} / ${readings.length}件`;
+// --- AWS コース（基礎 / SAA / SAP）---
+const AWS_MODE_LABELS = { mix: '新しい問題', review: '復習', weak: '弱点の領域' };
 
-  const filter = STATE.readingFilter;
-  const filtered = readings.filter(r => filter === 'all' || (filter === 'done' ? r.done : !r.done));
-  const list = document.getElementById('readingList');
-  if (filtered.length === 0) {
-    list.innerHTML = `<p class="text-muted">${filter === 'done' ? 'まだ読了したものはありません' : 'すべて読了しました 🎉'}</p>`;
+function startAwsQuiz(exam, label, mode, count = 10) {
+  switchTab('quest');
+  startQuizRun({
+    type: '一問一答',
+    category: 'aws',
+    title: `AWS一問一答: ${label}（${AWS_MODE_LABELS[mode] || '演習'}・${count}問）`,
+    quiz: { exam, mode, count },
+    reason: mode === 'review'
+      ? '覚えていなかった問題と、忘れかける頃の問題を出し直して記憶を定着させます。'
+      : 'AWS公式ドキュメントを根拠にしたオリジナル問題で、サービスの使い分けと設計判断を確認します。',
+    criteria: '答えを見る前に自分の答えを思い出し、「覚えていた／覚えていない」を正直に選ぶこと。',
+    decisionSource: 'manual'
+  });
+}
+
+function renderAwsCourses(aws) {
+  const grid = document.getElementById('awsCourseGrid');
+  if (!aws || !aws.courses?.length) {
+    grid.innerHTML = '<p class="text-muted">AWSの問題を読み込めませんでした。</p>';
     return;
   }
-  list.innerHTML = filtered.map(r => `
-    <div class="reading-row">
-      <div class="reading-main">
-        <div class="reading-tags">
-          <span class="tag tag-cat">${escapeHtml(r.org)}</span>
-          <span class="tag tag-type">${escapeHtml(r.kind)}・${r.publishedAt ? `公開 ${r.publishedAt}` : r.year}</span>
-          <span class="tag tag-time">⏱ ${r.minutes}分・${escapeHtml(r.level)}</span>
-          ${r.done ? '<span class="tag tag-source jev">✔ 読了</span>' : ''}
+  document.getElementById('awsCount').textContent = `学習済み ${aws.stats.studied} / ${aws.stats.total}問`;
+  grid.innerHTML = aws.courses.map(c => {
+    const pct = c.stats.total ? Math.round((c.stats.studied / c.stats.total) * 100) : 0;
+    const weak = c.fields.filter(f => f.weak);
+    const domains = c.fields.map(f => {
+      const w = c.domains.find(d => `${c.exam}-${d.id}` === f.id)?.weight;
+      const rate = f.accuracy === null ? '判定前' : `${Math.round(f.accuracy * 100)}%`;
+      return `<li class="${f.weak ? 'weak' : ''}"><span>${escapeHtml(f.name)}${w ? `（配分${w}%）` : ''}</span><span>${f.studied}/${f.total}問・覚えていた割合 ${rate}${f.weak ? ' ⚠弱点' : ''}</span></li>`;
+    }).join('');
+    return `
+      <div class="aws-course" data-course="${escapeHtml(c.id)}">
+        <div class="aws-course-head">
+          <div><strong>${escapeHtml(c.level)}</strong><span class="aws-code"> ${escapeHtml(c.examCode)}</span></div>
+          <span class="count-label">${c.stats.studied} / ${c.stats.total}問</span>
         </div>
-        <a class="reading-title" href="${escapeHtml(r.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(r.title)} ↗</a>
-        <p class="reading-focus">${escapeHtml(r.focus)}</p>
-      </div>
-      <button class="btn btn-secondary btn-sm" data-rid="${escapeHtml(r.id)}" type="button">${r.done ? 'もう一度' : '読む'}</button>
-    </div>`).join('');
-
-  list.querySelectorAll('button[data-rid]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const r = readings.find(x => x.id === btn.getAttribute('data-rid'));
-      if (!r) return;
-      switchTab('quest');
-      startQuestRun({
-        type: 'レポートを読む',
-        category: 'ai',
-        title: `${r.org}: ${r.title}`,
-        sourceRef: `${r.org}（${r.kind}・${r.year}年）`,
-        url: r.url,
-        focus: r.focus,
-        task: r.task,
-        recommendedMinutes: r.minutes,
-        reason: 'AI 大手が公開している一次情報を読み、要点を自分の言葉で説明できるようにします。',
-        criteria: r.task,
-        itemId: r.itemId,
-        decisionSource: 'manual'
-      });
+        <p class="aws-course-name">${escapeHtml(c.name)}</p>
+        ${c.notice ? `<p class="field-hint">${escapeHtml(c.notice)}</p>` : ''}
+        <div class="quiz-stat-bar"><div data-pct="${pct}"></div></div>
+        <div class="quiz-stat-meta">定着 ${c.stats.mastered}問 ・ 復習待ち ${c.stats.due}問（うち覚えていない ${c.stats.wrongDue}問）</div>
+        <ul class="aws-domains">${domains}</ul>
+        <div class="aws-course-actions">
+          <button class="btn btn-primary btn-sm" type="button" data-mode="mix">▶ 新しい問題</button>
+          <button class="btn btn-secondary btn-sm" type="button" data-mode="review"${c.stats.due ? '' : ' disabled'}>復習 ${c.stats.due}問</button>
+          <button class="btn btn-secondary btn-sm" type="button" data-mode="weak"${weak.length ? '' : ' disabled'}>弱点の領域</button>
+        </div>
+        <a class="run-link" href="${escapeHtml(c.guideUrl)}" target="_blank" rel="noopener noreferrer">AWS公式の試験ガイド ↗</a>
+      </div>`;
+  }).join('');
+  grid.querySelectorAll('.aws-course').forEach(card => {
+    const course = aws.courses.find(c => c.id === card.getAttribute('data-course'));
+    card.querySelectorAll('button[data-mode]').forEach(btn => {
+      btn.addEventListener('click', () => startAwsQuiz(course.exam, `${course.examCode} ${course.level}`, btn.getAttribute('data-mode')));
     });
   });
 }
 
-// AI の新着（公式ブログ・arXiv）。「素材に追加」でキャッチアップ素材として登録する
-async function loadAiFeed() {
-  const list = document.getElementById('feedList');
-  list.innerHTML = '<p class="text-muted">新着を読み込み中...</p>';
-  try {
-    const feed = await api('/api/ai-feed');
-    document.getElementById('feedUpdated').textContent = feed.fetchedAt
-      ? `${new Date(feed.fetchedAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 時点`
-      : '';
-    const items = (feed.items || []).slice(0, 20);
-    if (items.length === 0) {
-      list.innerHTML = '<p class="text-muted">新着を取得できませんでした。時間をおいて開き直してください。</p>';
-      return;
-    }
-    list.innerHTML = items.map((item, i) => `
-      <div class="reading-row">
-        <div class="reading-main">
-          <div class="reading-tags">
-            <span class="tag tag-cat">${escapeHtml(item.source)}</span>
-            ${item.publishedAt ? `<span class="tag tag-type">${escapeHtml(item.publishedAt.slice(0, 10))}</span>` : ''}
-          </div>
-          <a class="reading-title" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.title)} ↗</a>
-          ${item.summary ? `<p class="reading-focus">${escapeHtml(item.summary)}</p>` : ''}
-        </div>
-      </div>`).join('') + (feed.errors && feed.errors.length
-      ? `<p class="field-hint">取得できなかったサイト: ${feed.errors.map(escapeHtml).join('、')}</p>` : '');
-
-  } catch (e) {
-    list.innerHTML = '<p class="text-muted">新着を読み込めませんでした</p>';
-  }
+function renderAwsReviewCard(courseStats) {
+  const rows = AWS_COURSE_UI.map(c => ({ ...c, stats: courseStats?.[c.id] })).filter(r => r.stats && r.stats.due > 0);
+  setHidden('awsReviewCard', rows.length === 0);
+  if (rows.length === 0) return;
+  document.getElementById('awsReviewText').textContent = rows
+    .map(r => `${r.label}: ${r.stats.due}問${r.stats.wrongDue ? `（覚えていない ${r.stats.wrongDue}問）` : ''}`).join(' ／ ') + ' の復習期限が来ています。';
+  const box = document.getElementById('awsReviewButtons');
+  box.innerHTML = rows.map(r => `<button class="btn btn-primary btn-sm" type="button" data-exam="${escapeHtml(r.exam)}">${escapeHtml(r.label)} を復習</button>`).join('');
+  box.querySelectorAll('button').forEach(btn => {
+    const row = rows.find(r => r.exam === btn.getAttribute('data-exam'));
+    btn.addEventListener('click', () => startAwsQuiz(row.exam, row.label, 'review', 20));
+  });
 }
 
-// --- 10. オフライン（PWA） ---
 function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   navigator.serviceWorker.register('/sw.js').catch(() => { /* 登録できなくても通常どおり使える */ });
