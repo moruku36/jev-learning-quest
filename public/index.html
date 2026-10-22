@@ -111,15 +111,27 @@
               <button class="pill active" data-val="all">すべて</button>
               <button class="pill" data-val="nw">ネットワーク</button><button class="pill" data-val="sc">支援士</button>
               <button class="pill" data-val="aws">AWS</button>
+              <button class="pill" data-val="gcp">GCP</button>
             </div>
           </div>
           <div class="filter-group" id="awsCourseGroup" hidden>
             <span class="filter-label">AWSコース</span>
             <div class="pill-group" id="awsCoursePills">
               <button class="pill active" data-val="all">すべて</button>
+              <button class="pill" data-val="aif">基礎AI AIF-C01</button>
               <button class="pill" data-val="clf">基礎 CLF-C02</button>
               <button class="pill" data-val="saa">設計・中級 SAA-C03</button>
               <button class="pill" data-val="sap">設計・上級 SAP-C02</button>
+            </div>
+          </div>
+          <div class="filter-group" id="gcpCourseGroup" hidden>
+            <span class="filter-label">GCPコース</span>
+            <div class="pill-group" id="gcpCoursePills">
+              <button class="pill active" data-val="all">すべて</button>
+              <button class="pill" data-val="gai">基礎AI Gen AI Leader</button>
+              <button class="pill" data-val="cdl">基礎 Digital Leader</button>
+              <button class="pill" data-val="ace">管理・中級 Cloud Engineer</button>
+              <button class="pill" data-val="pca">設計・上級 Cloud Architect</button>
             </div>
           </div>
           <div class="filter-group">
@@ -425,7 +437,7 @@
 
         <div class="card aws-card" id="awsCard">
           <div class="card-title-row">
-            <h3 class="card-heading">☁️ AWS 一問一答（基礎・設計 中級・上級）</h3>
+            <h3 class="card-heading">☁️ AWS 一問一答（基礎AI・基礎・設計 中級・上級）</h3>
             <span class="count-label" id="awsCount"></span>
           </div>
           <p class="text-desc">
@@ -434,6 +446,15 @@
             <strong>オフライン保存の対象外です。</strong>AWSの問題・復習・弱点の演習には、オンライン接続が必要です。
           </p>
           <div class="aws-course-grid" id="awsCourseGrid"><p class="text-muted">読み込み中...</p></div>
+        </div>
+
+        <div class="card aws-card" id="gcpCard">
+          <div class="card-title-row">
+            <h3 class="card-heading">☁️ GCP 一問一答（基礎AI・基礎・管理 中級・設計 上級）</h3>
+            <span class="count-label" id="gcpCount"></span>
+          </div>
+          <p class="text-desc">Google Cloudの公開試験ガイドに沿った日本語のオリジナル問題です。公式試験問題ではなく、試験の形式や合格を保証するものではありません。「答えを見る」で確認し、自分で判定します。<strong>オンライン接続が必要です。</strong></p>
+          <div class="aws-course-grid" id="gcpCourseGrid"><p class="text-muted">読み込み中...</p></div>
         </div>
 
         <div class="card exam-snapshot">
@@ -513,6 +534,10 @@
             <p class="text-desc" id="awsReviewText"></p>
           </div>
           <div class="aws-review-buttons" id="awsReviewButtons"></div>
+        </div>
+        <div class="card quiz-review-card" id="gcpReviewCard" hidden>
+          <div><h3 class="card-heading">☁️ GCP 一問一答の復習</h3><p class="text-desc" id="gcpReviewText"></p></div>
+          <div class="aws-review-buttons" id="gcpReviewButtons"></div>
         </div>
 
         <div class="review-items-container" id="reviewItemsContainer"></div>
