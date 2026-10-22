@@ -2,9 +2,7 @@
 name: update-content
 
 on:
-  schedule:
-    # 毎週月曜 00:17 UTC (日本時間 09:17)
-    - cron: '17 0 * * 1'
+  # 2026-10-22 に週次実行を停止（旧分野は画面に出していない）。手動実行のみ。
   workflow_dispatch:
 
 concurrency:

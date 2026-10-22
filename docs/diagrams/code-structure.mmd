@@ -1,0 +1,31 @@
+flowchart TB
+    subgraph entry["エントリーポイント"]
+        server["server.js<br/>ローカル (npm start)"]
+        api["api/index.js<br/>Vercel Function"]
+    end
+    boot["lib/bootstrap.js<br/>local / cloud を判定<br/>設定不足は全 API 503"]
+    app["lib/app.js<br/>ルーティング・入力検証<br/>レート制限"]
+
+    subgraph logic["学習ロジック"]
+        engine["quest-engine.js<br/>Jev + ルール選定"]
+        quiz["quiz.js<br/>一問一答・間隔反復"]
+        review["review.js<br/>キーワード照合・Claude 添削"]
+        nwg["nw-grading.js<br/>NW 午前の採点"]
+        cat["categories.js<br/>nw / sc / aws (旧分野は非表示)"]
+    end
+
+    content["lib/content/<br/>quiz/*.json · aws/*.js · nw-*.json<br/>sc-written.js"]
+    sec["security.js<br/>ヘッダー"]
+    file["storage-file.js<br/>data/*.json"]
+    sb["supabase.js<br/>認証・許可リスト・Postgres"]
+    ui["public/<br/>app.js · nw-exercise.js · sw.js"]
+
+    server --> boot
+    api --> boot
+    boot --> app
+    app --> logic
+    app --> sec
+    logic --> content
+    boot -->|local| file
+    boot -->|cloud| sb
+    ui -.->|"/api/*"| app

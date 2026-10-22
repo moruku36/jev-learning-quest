@@ -51,5 +51,5 @@
 
 ## 未対応・要判断
 
-- 週次の読み物更新（`.github/workflows/update-content.yml`、`scripts/update-readings.js`）は、画面から外した旧データを更新し続ける。止めるかどうかはワークフロー設定の変更になるため、触れていない。
+- 週次の読み物更新（`.github/workflows/update-content.yml`、`scripts/update-readings.js`）は 2026-10-22 に停止した（schedule を外し手動実行のみ、GitHub Actions 上も無効化）。
 - 旧分野の履歴は画面から見えなくなる。確認したい場合は、設定のバックアップ（JSON）に含まれる。

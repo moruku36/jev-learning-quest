@@ -1,0 +1,23 @@
+sequenceDiagram
+    autonumber
+    actor U as 利用者
+    participant V as Vercel 静的配信
+    participant F as Vercel Function
+    participant A as Supabase Auth
+    participant D as Postgres (RLS)
+    participant J as Jev API
+
+    U->>V: ページを開く
+    V-->>U: index.html / app.js
+    U->>F: GET /api/config
+    F-->>U: Supabase の URL と公開キーのみ
+    U->>A: GitHub でログイン (PKCE)
+    A-->>U: アクセストークン (JWT)
+    U->>F: POST /api/quest/recommend
+    F->>A: トークン検証
+    F->>D: 許可リスト確認 (本人のトークン)
+    D-->>F: 許可済み (未登録なら 403)
+    F->>D: 学習データを読み込み
+    F->>J: Choice: 候補から1つ選ぶ
+    J-->>F: 選んだ候補
+    F-->>U: 今日のクエスト

@@ -2,16 +2,11 @@
 
 [English](README.md) | [日本語](README.ja.md)
 
-使える時間と気分からJevが学習課題を1つ選び、理解度と復習の要否を判定するWebアプリです。ネットワークスペシャリスト・支援士の試験対策とAWSの学習（基礎・SAA・SAP）を扱います。旧分野のAI・クラウド・セキュリティの読み物は、データを残したまま画面・おすすめ・集計から外しました（[AWSコースと旧分野の整理](docs/aws-courses.md)）。
-
----
-
-# Jev 学習クエスト (Jev Learning Quest)
+使える時間と気分から判断AI **Jev** が学習課題を1つ選び、理解度と復習の要否を判定するWebアプリです。ネットワークスペシャリスト・情報処理安全確保支援士の試験対策と、AWSの学習（基礎・SAA・SAP）を、短い時間でも迷わず続けられるように作っています。旧分野のAI・クラウド・セキュリティの読み物は、データを残したまま画面・おすすめ・集計から外しました（[AWSコースと旧分野の整理](docs/aws-courses.md)）。
 
 **本番サイト:** https://todays-learning-quest.vercel.app/
 
-判断AI **Jev** が「今日やる1つ」を選んでくれる学習用のWebアプリです。
-**ネットワークスペシャリスト・情報処理安全確保支援士の試験対策**と、**AWSの学習（基礎・SAA・SAP）**を、短い時間でも迷わず続けられるように作っています。
+**目次:** [構成図](#構成図) · [セキュリティ設計](#セキュリティ設計) · [クラウド版のデプロイ手順](#クラウド版のデプロイ手順) · [ローカル版の使い方](#ローカル版の使い方) · [使い方](#使い方) · [環境変数](#環境変数) · [ディレクトリ構成](#ディレクトリ構成) · [開発・テスト](#開発テスト) · [注意事項](#注意事項) · [関連ドキュメント](#関連ドキュメント)
 
 ```
 使える時間と気分を選ぶ → Jev がクエストを1つ提案 → 解いて自己採点 → Jev が理解度と復習の要否を判定
@@ -30,96 +25,11 @@
 
 ## 構成図
 
-### システム構成（クラウド版）
+ブラウザは Vercel の静的配信と `/api/*`（Vercel Function）、Supabase Auth とやり取りします。Function は本人のトークンで Postgres（RLS）に読み書きし、Jev API・Claude API はサーバー内からだけ呼びます。
 
-```mermaid
-flowchart LR
-    user["👤 利用者<br/>PC / スマホのブラウザ"]
+![システム構成（クラウド版）](docs/diagrams/system-architecture.svg)
 
-    subgraph vercel["Vercel"]
-        cdn["静的ファイル配信 (CDN)<br/>public/ : index.html, app.js, styles.css<br/>+ セキュリティヘッダー (CSP / HSTS ほか)"]
-        fn["Vercel Function<br/>api/index.js → lib/app.js<br/>クエスト選定・評価・データ保存"]
-        env[("環境変数<br/>JEV_API_KEY (Sensitive)<br/>SUPABASE_URL<br/>SUPABASE_ANON_KEY")]
-    end
-
-    subgraph supabase["Supabase"]
-        auth["Supabase Auth<br/>GitHub OAuth (PKCE)"]
-        db[("Postgres<br/>allowed_users / user_data<br/>行レベルセキュリティ (RLS)")]
-    end
-
-    github["GitHub<br/>OAuth"]
-    jsdelivr["jsDelivr<br/>supabase-js (バージョン固定 + SRI)"]
-    jev["Jev API<br/>api.typesafe.ai<br/>Choice / Score / Noul"]
-
-    user -- "HTTPS" --> cdn
-    user -- "HTTPS + Bearer トークン<br/>/api/*" --> fn
-    user -- "ログイン" --> auth
-    auth <--> github
-    user -. "ライブラリ読み込み" .-> jsdelivr
-    fn -- "トークン検証 / 許可リスト確認" --> auth
-    fn -- "本人のトークンで読み書き<br/>(RLS で本人の行のみ)" --> db
-    fn -- "判断の依頼<br/>(キーはサーバー内だけで使用)" --> jev
-    env -. 参照 .-> fn
-```
-
-### ログインからクエスト提案まで
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor U as 利用者 (ブラウザ)
-    participant V as Vercel (静的配信)
-    participant F as Vercel Function (/api)
-    participant A as Supabase Auth
-    participant G as GitHub
-    participant D as Supabase Postgres (RLS)
-    participant J as Jev API
-
-    U->>V: ページを開く
-    V-->>U: index.html / app.js（CSP 付き）
-    U->>F: GET /api/config
-    F-->>U: Supabase の URL と公開キーのみ（Jev キーは返さない）
-    U->>A: GitHub でログイン（PKCE）
-    A->>G: OAuth 認可
-    G-->>A: 認可コード
-    A-->>U: アクセストークン（JWT）
-    U->>F: POST /api/quest/recommend<br/>Authorization: Bearer トークン
-    F->>A: トークンを検証（/auth/v1/user）
-    A-->>F: ユーザー ID・メールアドレス
-    F->>D: 許可リストを確認（本人のトークンで）
-    D-->>F: 許可済み（載っていなければ 403）
-    F->>D: 本人の学習データを読み込み
-    D-->>F: user_data（RLS により本人の行だけ）
-    F->>J: Choice: 候補から今日のクエストを選ぶ
-    J-->>F: 選んだ候補 ID
-    F-->>U: 今日のクエスト（判定元: Jev）
-```
-
-### コードの構成
-
-```mermaid
-flowchart TB
-    subgraph entry["エントリーポイント"]
-        server["server.js<br/>ローカル実行 (npm start)"]
-        api["api/index.js<br/>Vercel Function"]
-    end
-    boot["lib/bootstrap.js<br/>環境変数から local / cloud を判定<br/>設定不足なら全 API を 503（fail closed）"]
-    app["lib/app.js<br/>API ルーティング・入力検証<br/>レート制限・エラー処理"]
-    engine["lib/quest-engine.js<br/>Jev クライアント<br/>ルールによる選定（フォールバック）"]
-    file["lib/storage-file.js<br/>data/*.json に保存"]
-    sb["lib/supabase.js<br/>認証・許可リスト・Postgres"]
-    sec["lib/security.js<br/>セキュリティヘッダー"]
-    ui["public/<br/>画面 (HTML / CSS / JS)"]
-
-    server --> boot
-    api --> boot
-    boot --> app
-    app --> engine
-    app --> sec
-    boot -- local --> file
-    boot -- cloud --> sb
-    ui -. "/api/*" .-> app
-```
+図の一覧（システム構成・コード構成・ログイン〜クエスト提案・一問一答の学習フロー・学習分野の範囲・テストとデプロイ）は [docs/architecture.md](docs/architecture.md) にあります。図の元データは `docs/diagrams/*.mmd`（Mermaid）で、[Pele](https://pele.run) で SVG にします。
 
 ---
 
@@ -275,6 +185,7 @@ Jev は文章を生成せず、次の **判断だけ** を行います。
 │   ├── bootstrap.js       # 環境変数から local / cloud を判定
 │   ├── quest-engine.js    # Jev クライアントとルールによる選定
 │   ├── quiz.js            # 一問一答の出題・4択・分野別の正答率・間隔反復・報告
+│   ├── nw-grading.js      # ネットワークスペシャリスト午前の採点
 │   ├── review.js          # 記述答案のキーワード照合と Claude による添削
 │   ├── categories.js      # 分野の定義（有効: nw / sc / aws、旧分野: ai / cloud / security は非表示・データ保持）
 │   ├── feeds.js           # 旧「AI の新着」の取得部品（画面・APIには出していない）
@@ -282,26 +193,29 @@ Jev は文章を生成せず、次の **判断だけ** を行います。
 │   │   ├── index.js       # 同梱教材の読み込み
 │   │   ├── quiz/*.json    # 一問一答 [番号, テーマ, 問題, 答え, 分野]（ap_07_aki.json = 応用情報 令和7年秋期 など）
 │   │   ├── fields.js      # 分野（小分類 → 中分類）の対応表
+│   │   ├── nw-exams.js, nw-content.json, nw-sources.json  # ネットワークスペシャリスト過去問（原本画像は public/nw-assets）
 │   │   ├── sc-written.js  # 支援士 午後/科目B の過去問リスト（IPA の PDF へのリンク）
-│   │   ├── aws/           # AWS コース別の一問一答（clf-c02.js / saa-c03.js / sap-c02.js）と、コース・領域の定義（index.js）
-│   │   └── ai-readings.js # 旧分野のレポート・論文リスト（画面・おすすめには出さない。週次更新の対象データとして保持）
+│   │   ├── aws/           # AWS コース別の一問一答（clf-c02.js / saa-c03.js / sap-c02.js）とコース・領域の定義（index.js）
+│   │   └── ai-readings.js ほか  # 旧分野の読み物データと週次更新の部品（画面・おすすめには出さない）
 │   ├── security.js        # セキュリティヘッダー
 │   ├── storage-file.js    # ローカル保存 (data/*.json)
 │   ├── supabase.js        # 認証・許可リスト・Postgres 保存
 │   └── initial-data.js    # 学習データの初期状態（空）と、旧バージョンのサンプルの除去
 ├── public/                # 画面（Vercel では CDN から配信）。sw.js / manifest.webmanifest / icon-*.png は PWA 用
-├── scripts/               # 教材の自動更新・ローテーションスクリプト (update-readings.js)
-├── .github/workflows/     # 自動テスト (test.yml) と週次教材更新 (update-content.yml)
+├── scripts/               # update-readings.js（旧分野データの更新。週次実行は停止、手動のみ）、nw-import/（NW 教材の取り込み）、render-diagrams.mjs（図の SVG 化）
+├── docs/                  # ドキュメント（一覧は docs/README.md）。図の元データは docs/diagrams/*.mmd
+├── .github/workflows/     # 自動テスト (test.yml) と旧分野データ更新 (update-content.yml、手動実行のみ)
 ├── supabase/schema.sql    # テーブル・RLS ポリシー
 ├── server.js              # ローカル実行用
 ├── vercel.json            # ルーティングとセキュリティヘッダー
-└── test_verification.js   # 自動テスト (npm test)
+└── test_*.js              # 自動テスト（npm test が6本を順に実行）
 ```
 
 ## 開発・テスト
 
 ```bash
-npm test
+npm run check   # 構文チェック
+npm test        # test_*.js 6本（Jev・Supabase・Claude・RSS はモック）
 ```
 
 モックの Jev API・Supabase・Claude API・RSS を使って、ローカル版とクラウド版の両方を自動検証します（実データや本物の API、外部サイトには触れません）。PR を作ると GitHub Actions でも自動で実行されます。
@@ -318,16 +232,10 @@ npm test
 - 学習データは空の状態から始まります（以前のバージョンで入っていた【サンプル】のデータは、読み込み時に自動で取り除かれます）
 - Jev の確信度は内部の判断材料としてのみ使い、正解率としては表示しません
 
-## ネットワークスペシャリストの過去問
+## 関連ドキュメント
 
-2021〜2025年春期の午前Ⅰ・午前Ⅱ・午後Ⅰ・午後Ⅱを収録しています。午前275問は原本の本文・選択肢・図表を画面内で読んで答えを思い出し、「答えを見る」でIPA公式正解を確認して「覚えていた／覚えていない」を自己判定します（答えを見ただけでは正解扱いになりません。過去に選択回答で採点した履歴はそのまま残ります）。午後25大問は全ページを読んで、設問別の答案と自己採点を保存します。2024年午後Ⅱ問2の無効小問3つは採点対象外です。午後の自己採点は試験の公式得点ではありません。
-
-メニューは「学ぶ・試験問題・復習・設定」です。素材登録は管理側のDottie/CIで行うため画面から外しました。保存済み教材・履歴・記事の定期更新は維持しています。問題ごとの出典ページにIPA原本URLと物理ページ、画像化・切り出しの変更表示を載せています。詳細は [実装とデータ保護](docs/network-exam-learning.md) と [資料照合記録](docs/nw-content-qa.md) を参照してください。
-
-## 暗記を繰り返す学習画面
-
-回答・自己採点後は正解を表示し、「次へ」を押すまで進みません。その間に間違えた理由を選べます。完了後はその回の誤答だけを、保存しない練習として再挑戦できます。最初の誤答履歴と翌日の復習予定は維持します。NW午前は回答・公式正解を採点時と保存後に表示し、原本画像は画面内で拡大・縮小・スクロール・ページ切替できます。短い学習枠に長いNW復習を推薦しない条件も修正しました。
-
-[PR #13](https://github.com/moruku36/jev-learning-quest/pull/13)では既存4本のテスト、構文確認、実Chromiumの375px/1280px学習フローが成功しました。保存失敗からの再送、オフライン結果の送信、再挑戦時の履歴維持、画像読み込み失敗も確認しています。[PR #15](https://github.com/moruku36/jev-learning-quest/pull/15)では、途中中断の保存失敗時も表示中の問題・問題番号・未保存回答を維持し、回答再開や部分結果の再送ができるよう修正しました。練習の終了ボタン・中断確認も「保存しません」と実際の動作に合わせています。これらの復帰ケースも含む[最終実装CI・画面証跡](https://github.com/moruku36/jev-learning-quest/actions/runs/37780087851)と[改善範囲・制限](docs/memorization-ui.md)を参照してください。build/lintコマンドは未設定です。
-
-既存の間隔反復、履歴形式、認証・RLS・資格情報は変更していません。実装merge commit `3e054b0521889a58db45e0ae94d1c8cb3a546ab8` の[Vercelデプロイチェック](https://vercel.com/moruku36s-projects/todays-learning-quest/AFC7zSgu3WVzQQBWSPVepkF9mzRn)は成功しました。ただし、接続中のVercelアカウントが対象プロジェクトを確認できず、この環境では公開静的ファイルも取得できなかったため、本番alias・静的ファイルとの照合は未完了です。
+- [docs/README.md](docs/README.md): ドキュメント一覧
+- [docs/architecture.md](docs/architecture.md): 構成図・学習フロー
+- [docs/network-exam-learning.md](docs/network-exam-learning.md) / [docs/nw-content-qa.md](docs/nw-content-qa.md): ネットワークスペシャリスト過去問の提供範囲・データ保護・資料照合
+- [docs/memorization-ui.md](docs/memorization-ui.md): 暗記画面の改善範囲・検証・制限（[PR #13](https://github.com/moruku36/jev-learning-quest/pull/13) / [PR #15](https://github.com/moruku36/jev-learning-quest/pull/15)）
+- [docs/aws-courses.md](docs/aws-courses.md): AWSコースと旧分野の整理

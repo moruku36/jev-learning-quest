@@ -1,5 +1,7 @@
 # Weekly reading list updates
 
+> **Stopped (2026-10-22):** the scheduled run is disabled; `update-content.yml` now only supports manual `workflow_dispatch`. The archived fields are not shown in the app.
+
 ## English
 
 The Monday workflow runs at 00:17 UTC (09:17 JST). GitHub Actions serializes scheduled and manual runs. A JST Monday week is marked `complete` only after eight eligible readings are added and every configured primary source fetches and parses successfully. If the catalog changes with fewer additions or any primary-source failures, state is recorded as `partial`; either state makes later same-week runs no-ops before any network request. With zero additions, no update state is written. A valid empty feed is reported as a successful empty source; an unexpected response format, an HTML challenge, or feed entries that the parser cannot read are source failures.
