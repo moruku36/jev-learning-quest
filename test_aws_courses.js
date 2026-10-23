@@ -17,8 +17,8 @@ const EXPECTED = {
   saa: { examCode: 'SAA-C03', counts: { d1: 10, d2: 10, d3: 8, d4: 6 }, weights: { d1: 30, d2: 26, d3: 24, d4: 20 } },
   sap: { examCode: 'SAP-C02', counts: { d1: 7, d2: 9, d3: 7, d4: 7 }, weights: { d1: 26, d2: 29, d3: 25, d4: 20 } }
 };
-assert.deepEqual(AWS_COURSES.map(c => c.id), ['clf', 'saa', 'sap']);
-for (const course of AWS_COURSES) {
+assert.deepEqual(AWS_COURSES.map(c => c.id), ['aif', 'clf', 'saa', 'sap']);
+for (const course of AWS_COURSES.filter(c => c.id !== 'aif')) {
   const exp = EXPECTED[course.id];
   assert.equal(course.examCode, exp.examCode, `${course.id}: 現行の試験コード`);
   assert.deepEqual(Object.fromEntries(course.domains.map(d => [d.id, d.weight])), exp.weights, `${course.id}: 公式の出題領域の配分`);
@@ -31,14 +31,14 @@ for (const course of AWS_COURSES) {
   assert(cards.every(c => c.sources.length >= 1 && c.sources[0] === c.url));
   assert(/^https:\/\/docs\.aws\.amazon\.com\/aws-certification\/latest\//.test(course.guideUrl), '試験ガイドはAWS公式');
 }
-assert.equal(AWS_CARDS.length, 103);
+assert.equal(AWS_CARDS.length, 138);
 assert.match(AWS_COURSES.find(c => c.id === 'sap').notice, /SAP-C03/, '次期試験は注記にとどめ、現行コードで作る');
 assert(!AWS_COURSES.some(c => /C03/.test(c.examCode) && c.id === 'sap'));
 
 const ids = new Set();
 const questions = new Set();
 for (const c of AWS_CARDS) {
-  assert.match(c.id, /^aws-(clf|saa|sap)-d[1-4]-\d{2}$/, `安定したID: ${c.id}`);
+  assert.match(c.id, /^aws-(aif|clf|saa|sap)-d[1-5]-\d{2}$/, `安定したID: ${c.id}`);
   assert(!ids.has(c.id), `ID重複: ${c.id}`);
   ids.add(c.id);
   assert(!questions.has(c.question), `問題文の重複（水増し）: ${c.question}`);
@@ -101,12 +101,12 @@ const sapSource = fs.readFileSync(path.join(__dirname, 'lib/content/aws/sap-c02.
 assert(!/トレードオフを(問う|答える)/.test(sapSource));
 
 // 旧IPA問題IDと衝突しない
-assert.equal(QUIZ_CARDS.length, 1050 + 103);
+assert.equal(QUIZ_CARDS.length, 1050 + 138 + 120);
 assert.equal(QUIZ_CARD_MAP.size, QUIZ_CARDS.length);
 assert(AWS_CARDS.every(c => !/^(sc|ap)-/.test(c.id)));
 
 // ---- 2. 分野の定義（旧3分野は外し、ネットワーク・支援士は残す）----
-assert.deepEqual(ACTIVE_CATEGORIES, ['nw', 'sc', 'aws']);
+assert.deepEqual(ACTIVE_CATEGORIES, ['nw', 'sc', 'aws', 'gcp']);
 assert.deepEqual(ARCHIVED_CATEGORIES, ['ai', 'cloud', 'security']);
 const appJs = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
 const clientArchived = /const ARCHIVED_CATEGORIES = \[([^\]]*)\]/.exec(appJs);
@@ -116,7 +116,7 @@ const html = fs.readFileSync(path.join(__dirname, 'public/index.html'), 'utf8');
 const pills = [...html.matchAll(/<button class="pill[^"]*" data-val="([^"]+)">([^<]+)<\/button>/g)];
 const catPills = /id="catPills">([\s\S]*?)<\/div>/.exec(html)[1];
 for (const old of ['ai', 'cloud', 'security']) assert(!new RegExp(`data-val="${old}"`).test(catPills), `分野ボタンに ${old} がない`);
-for (const keep of ['all', 'nw', 'sc', 'aws']) assert(new RegExp(`data-val="${keep}"`).test(catPills), `分野ボタンに ${keep} がある`);
+for (const keep of ['all', 'nw', 'sc', 'aws', 'gcp']) assert(new RegExp(`data-val="${keep}"`).test(catPills), `分野ボタンに ${keep} がある`);
 assert(/>ネットワーク</.test(catPills) && />支援士</.test(catPills) && />AWS</.test(catPills));
 for (const gone of ['readingList', 'feedList', 'readingFilterPills', 'AI 大手のレポート', 'AI の新着']) assert(!html.includes(gone), `読み物の導線が残っていない: ${gone}`);
 // 支援士の出題分野「セキュリティ」（一問一答の中分類）は残す
@@ -157,10 +157,10 @@ assert(pills.length > 0);
     assert.deepEqual(Object.keys(c0.quiz.exams).sort(), ['ap', 'sc'], '従来の一問一答の試験一覧はIPAのみ');
     assert.equal(c0.quiz.stats.all.total, 1050, '従来の集計（IPA）は変わらない');
     assert.equal(c0.quiz.stats.all.studied, 1);
-    assert.equal(c0.aws.courses.length, 3);
-    assert.deepEqual(c0.aws.courses.map(c => c.stats.total), [39, 34, 30]);
-    assert.equal(c0.aws.stats.total, 103);
-    assert(c0.aws.courses.every(c => c.fields.length === 4 && c.domains.length === 4));
+    assert.equal(c0.aws.courses.length, 4);
+    assert.deepEqual(c0.aws.courses.map(c => c.stats.total), [35, 39, 34, 30]);
+    assert.equal(c0.aws.stats.total, 138);
+    assert(c0.aws.courses.every(c => c.fields.length === c.domains.length));
     const h0 = (await call('/api/history')).data;
     assert(!h0.history.some(h => ARCHIVED_CATEGORIES.includes(h.category)), '履歴一覧に旧分野は出ない');
     assert(h0.history.some(h => h.id === 'kept-sc'), 'ネットワーク・支援士の記録は残る');

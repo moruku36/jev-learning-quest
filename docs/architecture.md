@@ -36,7 +36,7 @@ NW 午前・支援士・AWS 共通の「答えを見る → 自己判定」で�
 
 ## 5. 学習分野の範囲
 
-詳細は [AWSコースと旧分野の整理](aws-courses.md)。
+詳細は [AWS・GCP の資格別一問一答](cloud-courses.md) と [AWSコースと旧分野の整理](aws-courses.md)。
 
 ![learning-scope](diagrams/learning-scope.svg)
 

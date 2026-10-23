@@ -2,9 +2,9 @@
 
 [English](README.md) | [日本語](README.ja.md)
 
-A learning web app where the decision AI **Jev** picks one task from your available time and mood, then judges your understanding and whether a review is needed. It covers Network Specialist and Registered Information Security Specialist exam preparation and AWS study (Cloud Practitioner, SAA, SAP).
+A learning web app where the decision AI **Jev** picks one task from your available time and mood, then judges your understanding and whether a review is needed. It covers Network Specialist and Registered Information Security Specialist exam preparation plus AWS and GCP certification flashcards from foundational AI through advanced courses.
 
-The former AI, cloud and security reading fields are archived: their data is kept, but they no longer appear in the app. AWS questions are online-only (not part of the offline question cache). See [AWS courses and field cleanup](docs/aws-courses.md).
+The former AI, cloud and security reading fields are archived: their data is kept, but they no longer appear in the app. Cloud certification questions are online-only (not part of the offline question cache). See [certification courses and official exam guides](docs/cloud-courses.md) and [AWS courses and field cleanup](docs/aws-courses.md).
 
 **Live app:** <https://todays-learning-quest.vercel.app/>
 
@@ -27,7 +27,7 @@ Details, scope and validation: [memorization UI notes](docs/memorization-ui.md).
 | --- | --- |
 | Network Specialist (2021–2025 spring) | 275 morning questions marked automatically; 25 complete afternoon questions with per-subquestion answers and self-assessment. Original IPA text, choices and diagrams are shown as attributed scans. See [implementation and sources](docs/network-exam-learning.md) and [content QA](docs/nw-content-qa.md). |
 | Information Security Specialist | Morning I/II one-question-one-answer decks (original questions from past-exam themes) and afternoon / Subject B links to the official IPA PDFs, with keyword matching and optional Claude feedback. |
-| AWS | Original Japanese questions grounded in official AWS documentation: CLF-C02 (39), SAA-C03 (34), SAP-C02 (30), each with domain, explanation, source URL and check date. Not official exam questions. See [AWS courses](docs/aws-courses.md). |
+| AWS and GCP | Original Japanese flashcards grounded in official exam guides: AWS AI Practitioner (35), CLF-C02 (39), SAA-C03 (34), SAP-C02 (30); GCP Generative AI Leader, Cloud Digital Leader, Associate Cloud Engineer and Professional Cloud Architect (30 each). Each card has domain, explanation, source URL and check date. Not official exam questions. See [certification courses](docs/cloud-courses.md) and [AWS courses](docs/aws-courses.md). |
 
 Explanations missing from the source materials are labelled as unavailable; answers are never guessed. AP/SC practice choices are generated from other cards' answers, not IPA's original choices.
 
@@ -62,11 +62,11 @@ More diagrams (code structure, login-to-quest sequence, recall flow, field scope
 
 ```bash
 npm run check   # syntax checks
-npm test        # six test_*.js scripts with mocked Jev, Supabase, Claude and RSS
+npm test        # seven test_*.js scripts with mocked Jev, Supabase, Claude and RSS
 ```
 
 There is no build or lint command. CI (`.github/workflows/test.yml`) runs both on every PR and push to `main`.
 
 ## Documentation
 
-See the [documentation index](docs/README.md). Notable pages: [architecture diagrams](docs/architecture.md), [AWS courses](docs/aws-courses.md), [memorization UI](docs/memorization-ui.md), [Network exam learning](docs/network-exam-learning.md), [weekly reading refresh notes](docs/weekly-reading-updates.md) (stopped on 2026-10-22; archived fields only).
+See the [documentation index](docs/README.md). Notable pages: [architecture diagrams](docs/architecture.md), [certification courses](docs/cloud-courses.md), [AWS courses](docs/aws-courses.md), [memorization UI](docs/memorization-ui.md), [Network exam learning](docs/network-exam-learning.md), [weekly reading refresh notes](docs/weekly-reading-updates.md) (stopped on 2026-10-22; archived fields only).

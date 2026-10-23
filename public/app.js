@@ -10,6 +10,7 @@ const STATE = {
     minutes: 20,
     category: 'all',
     awsCourse: 'all',
+    gcpCourse: 'all',
     goal: 'balance'
   },
   timer: {
@@ -37,15 +38,23 @@ const CATEGORY_NAMES = {
   nw: 'ネットワークスペシャリスト',
   sc: '支援士',
   aws: 'AWS',
+  gcp: 'GCP',
   ai: 'AI',
   cloud: 'クラウド',
   security: 'セキュリティ'
 };
 
 const AWS_COURSE_UI = [
+  { id: 'aif', exam: 'aws-aif', label: '基礎AI AIF-C01' },
   { id: 'clf', exam: 'aws-clf', label: '基礎 CLF-C02' },
   { id: 'saa', exam: 'aws-saa', label: '設計・中級 SAA-C03' },
   { id: 'sap', exam: 'aws-sap', label: '設計・上級 SAP-C02' }
+];
+const GCP_COURSE_UI = [
+  { id: 'gai', exam: 'gcp-gai', label: '基礎AI Generative AI Leader' },
+  { id: 'cdl', exam: 'gcp-cdl', label: '基礎 Cloud Digital Leader' },
+  { id: 'ace', exam: 'gcp-ace', label: '管理・中級 Associate Cloud Engineer' },
+  { id: 'pca', exam: 'gcp-pca', label: '設計・上級 Professional Cloud Architect' }
 ];
 
 const SCORE_LABELS = ['-', '基礎から見直し', '要復習', '概ね理解', 'しっかり理解'];
@@ -324,10 +333,15 @@ function initFilterPills() {
   setupPills('catPills', val => {
     STATE.conditions.category = val;
     setHidden('awsCourseGroup', val !== 'aws');
+    setHidden('gcpCourseGroup', val !== 'gcp');
     loadRecommendedQuest();
   });
   setupPills('awsCoursePills', val => {
     STATE.conditions.awsCourse = val;
+    loadRecommendedQuest();
+  });
+  setupPills('gcpCoursePills', val => {
+    STATE.conditions.gcpCourse = val;
     loadRecommendedQuest();
   });
   setupPills('goalPills', val => {
@@ -885,6 +899,7 @@ async function loadReviewList() {
     const pending = history.filter(isPendingReview);
     renderQuizReviewCard(histData.quizStats);
     renderAwsReviewCard(histData.courseStats);
+    renderGcpReviewCard(histData.gcpCourseStats);
     renderLearningLanes(contentData);
 
     if (pending.length === 0) {
@@ -1018,7 +1033,7 @@ async function updateReviewBadge() {
   try {
     const data = await api('/api/history');
     // 一問一答は「前回間違えて復習期限が来た問題」だけをバッジに数える
-    const quizWrongDue = (data.quizStats ? data.quizStats.wrongDue : 0) + (data.awsStats ? data.awsStats.wrongDue : 0);
+    const quizWrongDue = (data.quizStats ? data.quizStats.wrongDue : 0) + (data.awsStats ? data.awsStats.wrongDue : 0) + (data.gcpStats ? data.gcpStats.wrongDue : 0);
     const pendingCount = (data.history || []).filter(h => !isArchivedCategory(h.category)).filter(isPendingReview).length + quizWrongDue;
     const badge = document.getElementById('reviewCountBadge');
     badge.textContent = pendingCount;
@@ -1233,19 +1248,19 @@ function initQuiz() {
     .forEach(r => reasonSelect.add(new Option(r, r)));
 }
 
-// AWS の問題はオフライン用の保存（最大60問）の対象外。オフラインでは「問題がない」ではなく接続が必要と伝える
-const AWS_OFFLINE_MESSAGE = 'AWSの問題はオフラインでは使えません。オンラインに接続してからもう一度開いてください';
-function isAwsExam(exam) {
-  return typeof exam === 'string' && (exam === 'aws' || exam.startsWith('aws-'));
+// クラウド資格の問題はオフライン用の保存（最大60問）の対象外。オフラインでは接続が必要と伝える
+const CLOUD_OFFLINE_MESSAGE = 'AWS・GCPの問題はオフラインでは使えません。オンラインに接続してからもう一度開いてください';
+function isCloudExam(exam) {
+  return typeof exam === 'string' && (exam === 'aws' || exam.startsWith('aws-') || exam === 'gcp' || exam.startsWith('gcp-'));
 }
 
 async function startQuizRun(quest) {
   const previousRequestId = STATE.questRequestId;
   const quiz = { format: preferredQuizFormat(), ...(quest.quiz || {}) };
-  const awsRun = isAwsExam(quiz.exam);
+  const cloudRun = isCloudExam(quiz.exam);
   let cards;
-  if (STATE.offline && awsRun) {
-    showToast(AWS_OFFLINE_MESSAGE, 'warn');
+  if (STATE.offline && cloudRun) {
+    showToast(CLOUD_OFFLINE_MESSAGE, 'warn');
     return;
   }
   if (STATE.offline) {
@@ -1258,8 +1273,8 @@ async function startQuizRun(quest) {
     } catch (err) {
       // 通信できないときは保存しておいた問題で続ける（AWS は保存の対象外なので、接続が必要と伝える）
       enterOfflineMode();
-      if (awsRun) {
-        showToast(AWS_OFFLINE_MESSAGE, 'warn');
+      if (cloudRun) {
+        showToast(CLOUD_OFFLINE_MESSAGE, 'warn');
         return;
       }
       cards = offlineDeckCards(quiz);
@@ -1285,7 +1300,7 @@ async function startQuizRun(quest) {
   setHidden('completionBanner', true);
   setHidden('quizRunCard', false);
   document.getElementById('quizTitle').textContent = quest.title;
-  document.getElementById('quizCatTag').textContent = categoryName(quest.category === 'aws' ? 'aws' : 'sc');
+  document.getElementById('quizCatTag').textContent = categoryName(['aws','gcp'].includes(quest.category) ? quest.category : 'sc');
   renderQuizCard();
   document.getElementById('quizRunCard').scrollIntoView({ behavior: 'smooth' });
 }
@@ -1304,18 +1319,20 @@ function renderQuizCard() {
   document.getElementById('quizExplanation').textContent=card.explanation || 'この教材には解説本文は収録されていません。出典リンクで根拠を確認してください。';
   document.getElementById('quizSourceLink').href = card.url;
   const isAws = card.family === 'aws';
+  const isGcp = card.family === 'gcp';
+  const isCloud = isAws || isGcp;
   // aws.amazon.com は「公式サイト」、docs.aws.amazon.com は「公式ドキュメント」と表記を分ける
   document.getElementById('quizSourceLink').textContent = isAws
     ? `AWS${card.sourceKind === 'site' ? '公式サイト' : '公式ドキュメント'}で確認する ↗`
-    : '元の過去問と解説を見る ↗';
+    : isGcp ? 'Google Cloud公式の試験ガイドで確認する ↗' : '元の過去問と解説を見る ↗';
   const sourceNote = document.getElementById('quizSourceNote');
-  sourceNote.textContent = isAws ? `オリジナル問題（公式問題ではありません）・${card.checkedAt} 確認` : '';
-  sourceNote.hidden = !isAws;
+  sourceNote.textContent = isCloud ? `オリジナル問題（公式問題ではありません）・${card.checkedAt} 確認` : '';
+  sourceNote.hidden = !isCloud;
   // 回答・解説が複数の公式資料に基づく問題は、ほかの根拠も並べる
   const more = document.getElementById('quizMoreSources');
   more.replaceChildren();
   const others = (card.sources || []).slice(1);
-  if (isAws && others.length) {
+  if (isCloud && others.length) {
     more.append('ほかの根拠: ');
     others.forEach((href, i) => {
       const a = document.createElement('a');
@@ -1327,7 +1344,7 @@ function renderQuizCard() {
       more.append(a, ' ');
     });
   }
-  more.hidden = !(isAws && others.length);
+  more.hidden = !(isCloud && others.length);
   document.getElementById('quizReportNote').value = '';
   document.getElementById('quizMistakeReason').value = '';
   document.querySelectorAll('#quizConfidence .confidence-choice').forEach(btn => {
@@ -1563,11 +1580,11 @@ function renderQuizCompletion(data,quiz) {
     ? `復習: ${reviewParts.join('・')}` : '復習: 間隔をあけて再確認';
   document.getElementById('compSourceTag').textContent = ev.decisionSource === 'jev' ? '判定: 🧠 Jev (Score / Noul)'
     : ev.decisionSource === 'offline' ? '判定: 📴 オンライン復帰後に保存' : '判定: 📋 ルール';
-  const isAws = data.history?.category === 'aws';
-  const all = data.stats && (isAws ? data.stats.aws : data.stats.all);
+  const cloud = ['aws','gcp'].includes(data.history?.category) ? data.history.category : null;
+  const all = data.stats && data.stats[cloud || 'all'];
   const weak = (data.weakFields || []).map(f => `${f.name}（${Math.round(f.accuracy * 100)}%）`).join('、');
   document.getElementById('compMessage').textContent = data.message || (all
-    ? `${isAws ? 'AWS一問一答（全コース）' : '一問一答'}の学習済み: ${all.studied} / ${all.total}問（定着 ${all.mastered}問）。${weak ? `弱点の${isAws ? '領域' : '分野'}: ${weak}。` : ''}覚えていた問題も 3日後・7日後…と間隔をあけて再確認します。`
+    ? `${cloud ? `${cloud.toUpperCase()}一問一答（全コース）` : '一問一答'}の学習済み: ${all.studied} / ${all.total}問（定着 ${all.mastered}問）。${weak ? `弱点の${cloud ? '領域' : '分野'}: ${weak}。` : ''}覚えていた問題も 3日後・7日後…と間隔をあけて再確認します。`
     : '');
   setHidden('compAnswerNotes', true);
   setHidden('compKeywordBox', true);
@@ -1686,6 +1703,7 @@ async function loadLibrary() {
     renderWrittenList();
     renderNetworkList();
     renderAwsCourses(data.aws);
+    renderGcpCourses(data.gcp);
     applyBarWidths();
     loadItemList();
   } catch (e) {
@@ -1827,29 +1845,33 @@ function renderWrittenList() {
 // --- AWS コース（基礎 / SAA / SAP）---
 const AWS_MODE_LABELS = { mix: '新しい問題', review: '復習', weak: '弱点の領域' };
 
-function startAwsQuiz(exam, label, mode, count = 10) {
+function startCloudQuiz(cloud, exam, label, mode, count = 10) {
+  const name = cloud.toUpperCase();
   switchTab('quest');
   startQuizRun({
     type: '一問一答',
-    category: 'aws',
-    title: `AWS一問一答: ${label}（${AWS_MODE_LABELS[mode] || '演習'}・${count}問）`,
+    category: cloud,
+    title: `${name}一問一答: ${label}（${AWS_MODE_LABELS[mode] || '演習'}・${count}問）`,
     quiz: { exam, mode, count },
     reason: mode === 'review'
       ? '覚えていなかった問題と、忘れかける頃の問題を出し直して記憶を定着させます。'
-      : 'AWS公式資料を根拠にしたオリジナル問題で、サービスの使い分けと基本的な設計を思い出して確認します。',
+      : `${name}の公式試験ガイドに沿ったオリジナル問題で知識を確認します。`,
     criteria: '答えを見る前に自分の答えを思い出し、「覚えていた／覚えていない」を正直に選ぶこと。',
     decisionSource: 'manual'
   });
 }
 
-function renderAwsCourses(aws) {
-  const grid = document.getElementById('awsCourseGrid');
-  if (!aws || !aws.courses?.length) {
-    grid.innerHTML = '<p class="text-muted">AWSの問題を読み込めませんでした。</p>';
+function startAwsQuiz(exam, label, mode, count = 10) { return startCloudQuiz('aws', exam, label, mode, count); }
+
+function renderCloudCourses(cloud, data) {
+  const name = cloud.toUpperCase();
+  const grid = document.getElementById(`${cloud}CourseGrid`);
+  if (!data || !data.courses?.length) {
+    grid.innerHTML = `<p class="text-muted">${name}の問題を読み込めませんでした。</p>`;
     return;
   }
-  document.getElementById('awsCount').textContent = `学習済み ${aws.stats.studied} / ${aws.stats.total}問`;
-  grid.innerHTML = aws.courses.map(c => {
+  document.getElementById(`${cloud}Count`).textContent = `学習済み ${data.stats.studied} / ${data.stats.total}問`;
+  grid.innerHTML = data.courses.map(c => {
     const pct = c.stats.total ? Math.round((c.stats.studied / c.stats.total) * 100) : 0;
     const weak = c.fields.filter(f => f.weak);
     const domains = c.fields.map(f => {
@@ -1873,30 +1895,36 @@ function renderAwsCourses(aws) {
           <button class="btn btn-secondary btn-sm" type="button" data-mode="review"${c.stats.due ? '' : ' disabled'}>復習 ${c.stats.due}問</button>
           <button class="btn btn-secondary btn-sm" type="button" data-mode="weak"${weak.length ? '' : ' disabled'}>弱点の領域</button>
         </div>
-        <a class="run-link" href="${escapeHtml(c.guideUrl)}" target="_blank" rel="noopener noreferrer">AWS公式の試験ガイド ↗</a>
+        <a class="run-link" href="${escapeHtml(c.guideUrl)}" target="_blank" rel="noopener noreferrer">${name}公式の試験ガイド ↗</a>
       </div>`;
   }).join('');
   grid.querySelectorAll('.aws-course').forEach(card => {
-    const course = aws.courses.find(c => c.id === card.getAttribute('data-course'));
+    const course = data.courses.find(c => c.id === card.getAttribute('data-course'));
     card.querySelectorAll('button[data-mode]').forEach(btn => {
-      btn.addEventListener('click', () => startAwsQuiz(course.exam, `${course.examCode} ${course.level}`, btn.getAttribute('data-mode')));
+      btn.addEventListener('click', () => startCloudQuiz(cloud, course.exam, `${course.examCode} ${course.level}`, btn.getAttribute('data-mode')));
     });
   });
 }
 
-function renderAwsReviewCard(courseStats) {
-  const rows = AWS_COURSE_UI.map(c => ({ ...c, stats: courseStats?.[c.id] })).filter(r => r.stats && r.stats.due > 0);
-  setHidden('awsReviewCard', rows.length === 0);
+function renderAwsCourses(data) { renderCloudCourses('aws', data); }
+function renderGcpCourses(data) { renderCloudCourses('gcp', data); }
+
+function renderCloudReviewCard(cloud, courseStats) {
+  const rows = (cloud === 'aws' ? AWS_COURSE_UI : GCP_COURSE_UI).map(c => ({ ...c, stats: courseStats?.[c.id] })).filter(r => r.stats && r.stats.due > 0);
+  setHidden(`${cloud}ReviewCard`, rows.length === 0);
   if (rows.length === 0) return;
-  document.getElementById('awsReviewText').textContent = rows
+  document.getElementById(`${cloud}ReviewText`).textContent = rows
     .map(r => `${r.label}: ${r.stats.due}問${r.stats.wrongDue ? `（覚えていない ${r.stats.wrongDue}問）` : ''}`).join(' ／ ') + ' の復習期限が来ています。';
-  const box = document.getElementById('awsReviewButtons');
+  const box = document.getElementById(`${cloud}ReviewButtons`);
   box.innerHTML = rows.map(r => `<button class="btn btn-primary btn-sm" type="button" data-exam="${escapeHtml(r.exam)}">${escapeHtml(r.label)} を復習</button>`).join('');
   box.querySelectorAll('button').forEach(btn => {
     const row = rows.find(r => r.exam === btn.getAttribute('data-exam'));
-    btn.addEventListener('click', () => startAwsQuiz(row.exam, row.label, 'review', 20));
+    btn.addEventListener('click', () => startCloudQuiz(cloud, row.exam, row.label, 'review', 20));
   });
 }
+
+function renderAwsReviewCard(courseStats) { renderCloudReviewCard('aws', courseStats); }
+function renderGcpReviewCard(courseStats) { renderCloudReviewCard('gcp', courseStats); }
 
 function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
@@ -2057,7 +2085,7 @@ function updateOfflineUi() {
     const pending = loadPendingResults().length;
     const left = offlineDeckCards({ exam: 'all', count: OFFLINE_DECK_SIZE }).length;
     document.getElementById('offlineBannerText').textContent =
-      `保存しておいた一問一答（残り${left}問）を解けます。AWSの問題はオフラインでは使えません（オンライン接続が必要です）。` +
+       `保存しておいた一問一答（残り${left}問）を解けます。AWS・GCPの問題はオフラインでは使えません（オンライン接続が必要です）。` +
       (pending ? `送信待ちの結果が${pending}回分あり、オンラインに戻ると自動で保存されます。` : '結果は次にオンラインになったときに自動で保存されます。');
   }
 }

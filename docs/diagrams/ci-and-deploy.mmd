@@ -1,6 +1,6 @@
 flowchart LR
     dev["開発者"] -->|PR / push main| gh["GitHub"]
-    gh -->|"test.yml"| test["npm run check<br/>npm test (6 スクリプト)"]
+    gh -->|"test.yml"| test["npm run check<br/>npm test (7 スクリプト)"]
     gh -->|"main 反映"| vdeploy["Vercel デプロイ"]
     vdeploy --> prod["todays-learning-quest.vercel.app"]
     cron["週次実行 (停止済み)"] -.->|"update-content.yml<br/>手動実行のみ"| upd["scripts/update-readings.js<br/>旧分野の読み物データ更新"]

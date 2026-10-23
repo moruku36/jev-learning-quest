@@ -11,10 +11,10 @@ flowchart TB
         quiz["quiz.js<br/>一問一答・間隔反復"]
         review["review.js<br/>キーワード照合・Claude 添削"]
         nwg["nw-grading.js<br/>NW 午前の採点"]
-        cat["categories.js<br/>nw / sc / aws (旧分野は非表示)"]
+        cat["categories.js<br/>nw / sc / aws / gcp (旧分野は非表示)"]
     end
 
-    content["lib/content/<br/>quiz/*.json · aws/*.js · nw-*.json<br/>sc-written.js"]
+    content["lib/content/<br/>quiz/*.json · aws/*.js · gcp/*.js · nw-*.json<br/>sc-written.js"]
     sec["security.js<br/>ヘッダー"]
     file["storage-file.js<br/>data/*.json"]
     sb["supabase.js<br/>認証・許可リスト・Postgres"]
