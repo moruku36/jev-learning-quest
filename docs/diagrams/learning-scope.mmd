@@ -1,0 +1,21 @@
+flowchart LR
+    subgraph active["表示中の分野"]
+        nw["nw<br/>ネットワークスペシャリスト<br/>午前 275問 · 午後 25大問"]
+        sc["sc<br/>情報処理安全確保支援士<br/>午前II · 午後 / 科目B"]
+        aws["aws<br/>AIF-C01 35問 · CLF-C02 39問<br/>SAA-C03 34問 · SAP-C02 30問"]
+        gcp["gcp<br/>基礎AI · 基礎 · 管理中級 · 設計上級<br/>各30問"]
+    end
+    subgraph archived["アーカイブ (データ保持・画面から非表示)"]
+        ai["ai"]
+        cloud["cloud"]
+        security["security"]
+    end
+    quest["今日のクエスト / 教材 / 復習 / 進捗"]
+    backup["バックアップに含まれる"]
+
+    nw --> quest
+    sc --> quest
+    aws --> quest
+    gcp --> quest
+    archived -.->|"表示・おすすめ・集計に使わない"| quest
+    archived --> backup

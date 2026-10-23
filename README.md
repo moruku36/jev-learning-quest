@@ -2,43 +2,71 @@
 
 [English](README.md) | [日本語](README.ja.md)
 
-A learning web application where Jev selects one task based on available time and mood, then evaluates understanding and review needs. It supports Network Specialist and Registered Information Security Specialist exam preparation, plus AWS and GCP certification flashcards from foundational AI through advanced courses. The former AI, cloud and security reading fields are archived: their data is kept but they no longer appear in the app. Cloud certification questions are online-only. See [certification courses and official exam guides](docs/cloud-courses.md) and [AWS courses and field cleanup](docs/aws-courses.md).
+A learning web app where the decision AI **Jev** picks one task from your available time and mood, then judges your understanding and whether a review is needed. It covers Network Specialist and Registered Information Security Specialist exam preparation plus AWS and GCP certification flashcards from foundational AI through advanced courses.
+
+The former AI, cloud and security reading fields are archived: their data is kept, but they no longer appear in the app. Cloud certification questions are online-only (not part of the offline question cache). See [certification courses and official exam guides](docs/cloud-courses.md) and [AWS courses and field cleanup](docs/aws-courses.md).
+
+**Live app:** <https://todays-learning-quest.vercel.app/>
+
+**Contents:** [Learning flow](#learning-flow) · [What it covers](#what-it-covers) · [Runtime choices](#runtime-choices) · [Architecture](#architecture) · [Repository layout](#repository-layout) · [Development](#development) · [Documentation](#documentation)
 
 ## Learning flow
 
 Choose available time and mood, receive one quest, answer and self-assess, then let Jev judge understanding and whether review is needed.
 
-Answers stay visible until you choose Next. After a session, retry only the mistakes as unsaved practice; your first result and scheduled review remain intact. Network originals have in-page zoom, scrolling and page controls, and morning questions use recall-and-reveal: see the question, press "Show answer" for the official key, then self-judge as remembered or not (revealing alone never counts as correct). See the [memorization UI notes](docs/memorization-ui.md) for scope, limitations and validation.
+- **Recall, then reveal.** Quiz cards and Network morning questions use "see the question → Show answer → remembered / not remembered". Revealing alone never counts as correct, and the app never advances on its own.
+- **Practice vs. record.** After a session you can retry only the mistakes as unsaved practice; your first result and scheduled review stay intact.
+- **Interruptions are safe.** Unsaved answers survive failed saves and offline periods and are sent when you are back online.
+- **Network originals** have in-page zoom, scrolling and page controls.
+
+Details, scope and validation: [memorization UI notes](docs/memorization-ui.md).
+
+## What it covers
+
+| Area | Content |
+| --- | --- |
+| Network Specialist (2021–2025 spring) | 275 morning questions marked automatically; 25 complete afternoon questions with per-subquestion answers and self-assessment. Original IPA text, choices and diagrams are shown as attributed scans. See [implementation and sources](docs/network-exam-learning.md) and [content QA](docs/nw-content-qa.md). |
+| Information Security Specialist | Morning I/II one-question-one-answer decks (original questions from past-exam themes) and afternoon / Subject B links to the official IPA PDFs, with keyword matching and optional Claude feedback. |
+| AWS and GCP | Original Japanese flashcards grounded in official exam guides: AWS AI Practitioner (35), CLF-C02 (39), SAA-C03 (34), SAP-C02 (30); GCP Generative AI Leader, Cloud Digital Leader, Associate Cloud Engineer and Professional Cloud Architect (30 each). Each card has domain, explanation, source URL and check date. Not official exam questions. See [certification courses](docs/cloud-courses.md) and [AWS courses](docs/aws-courses.md). |
+
+Explanations missing from the source materials are labelled as unavailable; answers are never guessed. AP/SC practice choices are generated from other cards' answers, not IPA's original choices.
 
 ## Runtime choices
 
 | Mode | Runtime | Authentication | Storage |
 | --- | --- | --- | --- |
-| Cloud | Vercel and Supabase | GitHub login and allowlist | Per-user Supabase Postgres data |
-| Local | Your PC with `npm start` | None; listens on 127.0.0.1 | data/store.json |
+| Cloud | Vercel and Supabase | GitHub login and allowlist | Per-user Supabase Postgres data (RLS) |
+| Local | Your PC with `npm start` | None; listens on 127.0.0.1 | `data/store.json` |
 
-[Published app](https://todays-learning-quest.vercel.app/). Configure `JEV_API_KEY` through the documented environment/settings path. The Japanese guide retains setup, cloud configuration, and operating details.
+Configure `JEV_API_KEY` through the documented environment/settings path. The [Japanese guide](README.ja.md) holds the full setup, cloud configuration, security design and operating details.
 
+## Architecture
 
-## Contents
+![System architecture](docs/diagrams/system-architecture.svg)
 
-- [api/](api)
-- [data/](data)
-- [lib/](lib)
-- [public/](public)
-- [scripts/](scripts)
-- [supabase/](supabase)
+More diagrams (code structure, login-to-quest sequence, recall flow, field scope, CI and deploy): [docs/architecture.md](docs/architecture.md). Sources live in `docs/diagrams/*.mmd` and are rendered to SVG with [Pele](https://pele.run).
 
-## Detailed documentation
+## Repository layout
 
-The [Japanese guide](README.ja.md) retains the complete original setup instructions, configuration, examples, project status, and limitations. See the [weekly reading refresh notes](docs/weekly-reading-updates.md) for Japanese and English details on source quality, replacement counts, and failure handling.
+| Path | Purpose |
+| --- | --- |
+| [api/](api) | Vercel Function entry (`/api/*`) |
+| [lib/](lib) | API routing, quest engine, quiz logic, storage, security headers; [lib/content/](lib/content) holds the bundled study material |
+| [public/](public) | Front end (served from the CDN on Vercel), PWA files, Network exam assets |
+| [data/](data) | Local-mode data |
+| [scripts/](scripts) | Weekly update of the archived reading data, Network import, diagram rendering |
+| [supabase/](supabase) | Tables and RLS policies |
+| [docs/](docs) | Documentation and diagram sources |
 
-## Network Specialist past exams
+## Development
 
-The 2021–2025 spring catalog includes 275 automatically marked morning questions and 25 complete afternoon questions with per-subquestion answers and self-assessment. Original IPA text/choices/diagrams are displayed as attributed scans. Existing materials, history and reading CI are preserved. See [implementation and sources](docs/network-exam-learning.md) and [content QA](docs/nw-content-qa.md).
+```bash
+npm run check   # syntax checks
+npm test        # seven test_*.js scripts with mocked Jev, Supabase, Claude and RSS
+```
 
-## Memorization UI validation and limits
+There is no build or lint command. CI (`.github/workflows/test.yml`) runs both on every PR and push to `main`.
 
-[PR #13](https://github.com/moruku36/jev-learning-quest/pull/13) passed the existing four test scripts, syntax checks, and real Chromium learning flows at 375px and 1280px, including failed saves, offline queues and practice preserving history. [PR #15](https://github.com/moruku36/jev-learning-quest/pull/15) also fixes partial-session save failures: the visible question, current index and unsaved answers stay aligned, so you can resume or retry saving. Practice screens and exit confirmations clearly say that results are not saved. The [final implementation CI and screen evidence](https://github.com/moruku36/jev-learning-quest/actions/runs/37780087851) cover these recovery paths at both screen sizes. There is no configured build or lint command.
+## Documentation
 
-Explanations absent from the source materials are labelled as unavailable; answers are not guessed. AP/SC practice choices are generated from other card answers rather than IPA's original choices. Cloud authentication, RLS, credentials and storage formats are unchanged. The implementation merge commit `3e054b0521889a58db45e0ae94d1c8cb3a546ab8` has a successful [Vercel deployment check](https://vercel.com/moruku36s-projects/todays-learning-quest/AFC7zSgu3WVzQQBWSPVepkF9mzRn). Production alias/asset verification remains incomplete: the connected Vercel account could not inspect the project, and the public assets could not be retrieved in this environment.
+See the [documentation index](docs/README.md). Notable pages: [architecture diagrams](docs/architecture.md), [certification courses](docs/cloud-courses.md), [AWS courses](docs/aws-courses.md), [memorization UI](docs/memorization-ui.md), [Network exam learning](docs/network-exam-learning.md), [weekly reading refresh notes](docs/weekly-reading-updates.md) (stopped on 2026-10-22; archived fields only).

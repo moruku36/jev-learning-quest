@@ -1,0 +1,29 @@
+flowchart LR
+    user["利用者<br/>PC / スマホのブラウザ (PWA)"]
+
+    subgraph vercel["Vercel (クラウド版)"]
+        cdn["静的配信 CDN<br/>public/ + セキュリティヘッダー"]
+        fn["Vercel Function<br/>api/index.js → lib/app.js"]
+        env[("環境変数<br/>JEV_API_KEY<br/>ANTHROPIC_API_KEY<br/>SUPABASE_URL / ANON_KEY")]
+    end
+
+    subgraph supabase["Supabase"]
+        auth["Auth<br/>GitHub OAuth (PKCE)"]
+        db[("Postgres<br/>allowed_users / user_data<br/>RLS")]
+    end
+
+    github["GitHub OAuth"]
+    jsd["jsDelivr<br/>supabase-js (固定 + SRI)"]
+    jev["Jev API<br/>Choice / Score / Noul"]
+    claude["Claude API<br/>記述答案の添削 (任意)"]
+
+    user -->|HTTPS| cdn
+    user -->|"/api/* + Bearer"| fn
+    user -->|ログイン| auth
+    auth <--> github
+    user -.->|ライブラリ| jsd
+    fn -->|トークン検証| auth
+    fn -->|"本人のトークンで読み書き"| db
+    fn -->|判断の依頼| jev
+    fn -->|添削の依頼| claude
+    env -.-> fn
