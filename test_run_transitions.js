@@ -67,7 +67,16 @@ const second={...first,title:'2025 pm2 Q2',itemId:'exam:nw-07_haru-pm2-2'};
  rejectCurrent(new Error('Replaced request failed'));await replaced;assert.equal(failed.el('nwExercise').textContent,'Replacement display');
  // Saving cannot be interrupted, even by a confirmed switch.
  h.el('btnCompleteQuest').disabled=true;h.setAccept(true);count=h.prompts();h.run('startNetworkQuestion(first)');assert.equal(h.prompts(),count);assert.equal(h.run('STATE.currentQuest.itemId'),second.itemId);
- console.log('Front-end VM: cancel/restart hero identity, protected NW/quiz/recommendation switches, late responses and in-flight save passed. Native confirm and SE3 remain browser checks.');
+ const series=harness();series.ctx.first=first;series.ctx.second=second;
+ series.run('initHeroActions();startNetworkQuestion(first,null,false,[first,second],0)');
+ assert.match(series.el('runTitle').textContent,/1 \/ 2問/);
+ series.el('questRunCard').hidden=true;series.el('btnCompNext').listeners.click();
+ assert.equal(series.run('STATE.currentQuest.itemId'),second.itemId);
+ assert.match(series.el('runTitle').textContent,/2 \/ 2問/);
+ series.run('loadRecommendedQuest=()=>{STATE.seriesFinished=true}');
+ series.el('questRunCard').hidden=true;series.el('btnCompNext').listeners.click();
+ assert.equal(series.run('STATE.seriesFinished'),true,'Network session ends at selected count');
+ console.log('Front-end VM: cancel/restart hero identity, bounded NW sessions, protected switches, late responses and in-flight save passed. Native confirm and device layout remain browser checks.');
 })().catch(e=>{console.error(e);process.exitCode=1;});
 
 

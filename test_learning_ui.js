@@ -200,7 +200,7 @@ const {QUIZ_CARDS}=require('./lib/content');
       await page.evaluate(()=>{switchTab('quest');});
       const pickerState=await page.evaluate(()=>({tab:STATE.activeTab,offline:STATE.offline,filterBarHidden:document.querySelector('.filter-bar').hidden}));
       assert.deepEqual(pickerState,{tab:'quest',offline:false,filterBarHidden:false},'The field picker is visible when online: '+JSON.stringify(pickerState));
-      assert.deepEqual(await page.locator('#catPills .pill').allTextContents(),['すべて','ネットワーク','支援士','AWS','GCP']);
+      assert.deepEqual(await page.locator('#catPills .pill').allTextContents(),['すべて','ネットワーク','情報処理安全確保支援士','AWS','GCP','Claude']);
       assert.equal(await page.locator('#awsCourseGroup').isVisible(),false);
       assert.equal(await page.locator('#gcpCourseGroup').isVisible(),false);
       await page.locator('#catPills').getByRole('button',{name:'AWS',exact:true}).click();

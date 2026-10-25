@@ -101,12 +101,12 @@ const sapSource = fs.readFileSync(path.join(__dirname, 'lib/content/aws/sap-c02.
 assert(!/トレードオフを(問う|答える)/.test(sapSource));
 
 // 旧IPA問題IDと衝突しない
-assert.equal(QUIZ_CARDS.length, 1050 + 138 + 120);
+assert.equal(QUIZ_CARDS.filter(c => c.family !== 'claude').length, 1050 + 138 + 120);
 assert.equal(QUIZ_CARD_MAP.size, QUIZ_CARDS.length);
 assert(AWS_CARDS.every(c => !/^(sc|ap)-/.test(c.id)));
 
 // ---- 2. 分野の定義（旧3分野は外し、ネットワーク・支援士は残す）----
-assert.deepEqual(ACTIVE_CATEGORIES, ['nw', 'sc', 'aws', 'gcp']);
+assert.deepEqual(ACTIVE_CATEGORIES, ['nw', 'sc', 'aws', 'gcp', 'claude']);
 assert.deepEqual(ARCHIVED_CATEGORIES, ['ai', 'cloud', 'security']);
 const appJs = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
 const clientArchived = /const ARCHIVED_CATEGORIES = \[([^\]]*)\]/.exec(appJs);
@@ -117,7 +117,7 @@ const pills = [...html.matchAll(/<button class="pill[^"]*" data-val="([^"]+)">([
 const catPills = /id="catPills">([\s\S]*?)<\/div>/.exec(html)[1];
 for (const old of ['ai', 'cloud', 'security']) assert(!new RegExp(`data-val="${old}"`).test(catPills), `分野ボタンに ${old} がない`);
 for (const keep of ['all', 'nw', 'sc', 'aws', 'gcp']) assert(new RegExp(`data-val="${keep}"`).test(catPills), `分野ボタンに ${keep} がある`);
-assert(/>ネットワーク</.test(catPills) && />支援士</.test(catPills) && />AWS</.test(catPills));
+assert(/>ネットワーク</.test(catPills) && />情報処理安全確保支援士</.test(catPills) && />AWS</.test(catPills));
 for (const gone of ['readingList', 'feedList', 'readingFilterPills', 'AI 大手のレポート', 'AI の新着']) assert(!html.includes(gone), `読み物の導線が残っていない: ${gone}`);
 // 支援士の出題分野「セキュリティ」（一問一答の中分類）は残す
 assert(content.FIELD_GROUPS.some(g => g.id === 'security' && g.name === 'セキュリティ'));

@@ -82,36 +82,17 @@
           </div>
         </div>
 
-        <!-- Jev 未設定時の案内 -->
-        <div class="setup-banner" id="setupBanner" hidden>
-          <div class="setup-banner-text">
-            <strong>Jev の APIキーを設定しましょう</strong>
-            <p>キーを入れると、Jev があなたの学習状況から「今日のクエスト」と「理解度・復習の要否」を判断します。未設定のままでもルールで全機能を使えます。</p>
-          </div>
-          <div class="setup-banner-actions">
-            <button class="btn btn-jev btn-sm" id="btnSetupKey">APIキーを設定する</button>
-            <button class="btn btn-ghost btn-sm" id="btnDismissSetup">あとで</button>
-          </div>
-        </div>
-
         <!-- 条件選択 -->
         <div class="filter-bar">
-          <div class="filter-group">
-            <span class="filter-label">使える時間</span>
-            <div class="pill-group" id="timePills">
-              <button class="pill" data-val="10">10分</button>
-              <button class="pill active" data-val="20">20分</button>
-              <button class="pill" data-val="30">30分</button>
-              <button class="pill" data-val="60">60分</button><button class="pill" data-val="120">120分</button>
-            </div>
-          </div>
+
           <div class="filter-group">
             <span class="filter-label">分野</span>
             <div class="pill-group" id="catPills">
               <button class="pill active" data-val="all">すべて</button>
-              <button class="pill" data-val="nw">ネットワーク</button><button class="pill" data-val="sc">支援士</button>
+              <button class="pill" data-val="nw">ネットワーク</button><button class="pill" data-val="sc">情報処理安全確保支援士</button>
               <button class="pill" data-val="aws">AWS</button>
               <button class="pill" data-val="gcp">GCP</button>
+              <button class="pill" data-val="claude">Claude</button>
             </div>
           </div>
           <div class="filter-group" id="awsCourseGroup" hidden>
@@ -134,15 +115,18 @@
               <button class="pill" data-val="pca">設計・上級 Cloud Architect</button>
             </div>
           </div>
-          <div class="filter-group">
-            <span class="filter-label">今日の気分</span>
-            <div class="pill-group" id="goalPills">
-              <button class="pill active" data-val="balance">おまかせ</button>
-              <button class="pill" data-val="weakness">弱点をつぶす</button>
-              <button class="pill" data-val="exercise">じっくり演習</button>
-              <button class="pill" data-val="input">サクッと確認</button>
+          <div class="filter-group" id="claudeCourseGroup" hidden>
+            <span class="filter-label">Claudeコース</span>
+            <div class="pill-group" id="claudeCoursePills">
+              <button class="pill active" data-val="all">すべて</button>
+              <button class="pill" data-val="ccdvf">CCDV-F</button>
             </div>
           </div>
+          <div class="filter-group">
+            <label class="filter-label" for="studyCount">問題数</label>
+            <select id="studyCount" class="simple-input study-count"><option value="5">5問</option><option value="10">10問</option><option value="20" selected>20問</option><option value="30">30問</option></select>
+          </div>
+          <p class="study-hint">Jev が問題を選びます。わからなければ、すぐに答えを見て大丈夫。</p>
         </div>
 
         <!-- クエスト提示カード -->
@@ -157,6 +141,8 @@
           <h2 class="quest-hero-title" id="heroTitle">クエストを読み込み中...</h2>
           <p class="quest-hero-source" id="heroSource"></p>
 
+          <details class="quest-details">
+            <summary>学習のねらい・出典</summary>
           <div class="quest-summary-box">
             <div class="summary-item">
               <span class="summary-label">🎯 ねらい</span>
@@ -167,11 +153,12 @@
               <p id="heroCriteria">-</p>
             </div>
           </div>
-          <div class="selection-note"><strong>このクエストを選んだ理由</strong><p class="decision-note" id="heroDecisionNote"></p></div>
+          <details class="selection-note"><summary>Jev が選んだ理由</summary><p class="decision-note" id="heroDecisionNote"></p></details>
 
+          </details>
           <div class="quest-card-footer">
             <button class="btn btn-secondary" id="btnChangeQuest">ほかの候補を見る</button>
-            <button class="btn btn-primary btn-lg" id="btnStartHero">▶ このクエストを始める</button>
+            <button class="btn btn-primary btn-lg" id="btnStartHero">▶ はじめる</button>
           </div>
         </div>
 
@@ -262,6 +249,7 @@
           </div>
           <div class="timer-bar"><div class="timer-bar-fill" id="quizBarFill"></div></div>
 
+          <p id="quizDeckNotice" class="field-hint" role="status" hidden></p>
           <div class="quiz-card">
             <div class="quiz-meta">
               <span class="tag tag-type" id="quizSourceTag">-</span>
@@ -269,13 +257,13 @@
             </div>
             <span class="box-label">設問</span>
             <p class="quiz-question" id="quizQuestion">-</p>
-            <div class="quiz-confidence" id="quizConfidence" role="group" aria-label="答える前の自信度">
+            <div hidden class="quiz-confidence" id="quizConfidence" role="group" aria-label="答える前の自信度">
               <span class="confidence-label">答える前の自信度</span>
               <button class="btn btn-outline btn-sm confidence-choice" data-confidence="high" type="button" aria-pressed="false">自信あり</button>
               <button class="btn btn-outline btn-sm confidence-choice" data-confidence="medium" type="button" aria-pressed="false">少し迷う</button>
               <button class="btn btn-outline btn-sm confidence-choice" data-confidence="low" type="button" aria-pressed="false">自信なし</button>
             </div>
-            <button class="btn btn-secondary btn-lg quiz-reveal" id="btnQuizReveal" type="button">答えを見る <kbd>Space</kbd></button>
+            <button class="btn btn-secondary btn-lg quiz-reveal" id="btnQuizReveal" type="button">答え・解説を見る <kbd>Space</kbd></button>
             <ol class="quiz-choices" id="quizChoices" aria-label="選択肢（ヒント。選んでも採点されません）" hidden></ol>
             <div class="quiz-answer" id="quizAnswerBox" role="status" aria-live="polite" hidden>
               <span class="box-label" id="quizAnswerLabel">💡 答え</span>
@@ -363,6 +351,13 @@
           <p class="panel-sub">年度と時間区分から選んで演習し、答案と復習を残します。</p>
         </div>
 
+        <div class="card" id="claudeCourseCard">
+          <h3 class="card-heading">Claude · CCDV-F</h3>
+          <p class="text-desc">Claude Certified Developer – Foundations。公式8領域に沿った独自の日本語練習問題32問。公式試験問題ではなく、合否を予測するものでもありません。</p>
+          <p id="claudeStats" class="field-hint"></p>
+          <div class="btn-group-row"><button class="btn btn-primary" id="btnClaudeStudy" type="button">一問一答をはじめる</button><button class="btn btn-secondary" id="btnCcdvfReview" type="button">復習待ちを解く</button></div>
+          <p class="field-hint">問題数は「学ぶ」で選んだ数を使います。各問題の解説から公式資料を確認できます。</p>
+        </div>
 
         <div class="card nw-card">
           <div class="card-title-row"><h3 class="card-heading">ネットワークスペシャリスト 過去5年</h3><span class="count-label" id="nwCount"></span></div>
@@ -427,7 +422,7 @@
               <label class="input-label" for="libCount">問題数</label>
               <select id="libCount" class="simple-input">
                 <option value="10">10問</option>
-                <option value="20">20問</option>
+                <option value="20" selected>20問</option>
                 <option value="30">30問</option>
               </select>
             </div>
@@ -557,6 +552,18 @@
       <section id="view-settings" class="view-panel">
         <div class="panel-header">
           <h2>設定</h2>
+        </div>
+
+        <!-- Jev 未設定時の案内 -->
+        <div class="setup-banner" id="setupBanner" hidden>
+          <div class="setup-banner-text">
+            <strong>Jev の APIキーを設定しましょう</strong>
+            <p>キーを入れると、Jev があなたの学習状況から「今日のクエスト」と「理解度・復習の要否」を判断します。未設定のままでもルールで全機能を使えます。</p>
+          </div>
+          <div class="setup-banner-actions">
+            <button class="btn btn-jev btn-sm" id="btnSetupKey">APIキーを設定する</button>
+            <button class="btn btn-ghost btn-sm" id="btnDismissSetup">あとで</button>
+          </div>
         </div>
 
         <!-- Jev 設定 -->

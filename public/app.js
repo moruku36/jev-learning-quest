@@ -8,9 +8,12 @@ const STATE = {
   jev: { jevConfigured: false, keySource: 'none', maskedKey: '' },
   conditions: {
     minutes: 20,
+    count: 20,
+    quickStudy: true,
     category: 'all',
     awsCourse: 'all',
     gcpCourse: 'all',
+    claudeCourse: 'all',
     goal: 'balance'
   },
   timer: {
@@ -39,6 +42,7 @@ const CATEGORY_NAMES = {
   sc: '支援士',
   aws: 'AWS',
   gcp: 'GCP',
+  claude: 'Claude',
   ai: 'AI',
   cloud: 'クラウド',
   security: 'セキュリティ'
@@ -324,16 +328,25 @@ function switchTab(tabName) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-// --- 2. 条件選択 (時間 / 分野 / 気分) ---
+// --- 2. 条件選択 (分野 / 問題数。旧APIの時間・目的は内部互換用) ---
 function initFilterPills() {
-  setupPills('timePills', val => {
-    STATE.conditions.minutes = parseInt(val, 10);
+  const savedClaudeCourse = storageGet('jlq.claudeCourse');
+  STATE.conditions.claudeCourse = ['all', 'ccdvf'].includes(savedClaudeCourse) ? savedClaudeCourse : 'all';
+  selectPill('claudeCoursePills', STATE.conditions.claudeCourse);
+  const countSelect = document.getElementById('studyCount');
+  const savedCount = Number(storageGet('jlq.studyCount'));
+  STATE.conditions.count = [5,10,20,30].includes(savedCount) ? savedCount : 20;
+  countSelect.value = String(STATE.conditions.count);
+  countSelect.addEventListener('change', () => {
+    STATE.conditions.count = Number(countSelect.value);
+    storageSet('jlq.studyCount', countSelect.value);
     loadRecommendedQuest();
   });
   setupPills('catPills', val => {
     STATE.conditions.category = val;
     setHidden('awsCourseGroup', val !== 'aws');
     setHidden('gcpCourseGroup', val !== 'gcp');
+    setHidden('claudeCourseGroup', val !== 'claude');
     loadRecommendedQuest();
   });
   setupPills('awsCoursePills', val => {
@@ -346,6 +359,11 @@ function initFilterPills() {
   });
   setupPills('goalPills', val => {
     STATE.conditions.goal = val;
+    loadRecommendedQuest();
+  });
+  setupPills('claudeCoursePills', val => {
+    STATE.conditions.claudeCourse = val;
+    storageSet('jlq.claudeCourse', val);
     loadRecommendedQuest();
   });
 }
@@ -409,7 +427,7 @@ function renderHeroQuest(quest, decisionSource, decisionNote) {
   document.getElementById('heroTitle').textContent = quest.title;
   document.getElementById('heroCategory').textContent = categoryName(quest.category);
   document.getElementById('heroType').textContent = quest.type;
-  document.getElementById('heroTime').textContent = `⏱ ${quest.recommendedMinutes || STATE.conditions.minutes}分`;
+  document.getElementById('heroTime').textContent = quest.quiz ? `${quest.quiz.count}問` : quest.networkSeries ? `${quest.networkSeries.length}問` : quest.networkQuestion?.kind === 'choice' ? '1問' : '記述式演習';
   document.getElementById('heroSource').textContent = quest.sourceRef ? `出典: ${quest.sourceRef}` : '';
   document.getElementById('heroReason').textContent = quest.reason;
   document.getElementById('heroCriteria').textContent = quest.criteria;
@@ -454,6 +472,13 @@ function initHeroActions() {
     } else if(STATE.nwRetry) startNetworkQuestion(STATE.nwRetry.question,STATE.nwRetry.historyId,true);
   });
   document.getElementById('btnCompNext').addEventListener('click', () => {
+    const series = STATE.currentQuest?.networkSeries;
+    if (series) {
+      const index = (STATE.currentQuest.networkIndex || 0) + 1;
+      if (index < series.length) startNetworkQuestion(series[index], null, false, series, index);
+      else loadRecommendedQuest();
+      return;
+    }
     const questions = STATE.library?.network || [];
     const current = questions.find(q=>q.itemId===STATE.currentQuest?.itemId);
     if (current) {
@@ -489,7 +514,7 @@ function openCandidatesModal() {
         <div class="modal-item-tags">
           <span class="tag tag-cat">${escapeHtml(categoryName(cand.category))}</span>
           <span class="tag tag-type">${escapeHtml(cand.type)}</span>
-          <span class="tag tag-time">${cand.recommendedMinutes || 20}分</span>
+          <span class="tag tag-time">${cand.quiz ? cand.quiz.count + '問' : cand.networkSeries ? cand.networkSeries.length + '問' : cand.networkQuestion?.kind === 'choice' ? '1問' : '記述式演習'}</span>
           ${isCurrent ? '<span class="tag tag-source jev">表示中</span>' : ''}
         </div>
         <h4>${escapeHtml(cand.title)}</h4>
@@ -548,7 +573,9 @@ function startQuestRun(quest) {
   setHidden('completionBanner', true);
   setHidden('questRunCard', false);
 
-  document.getElementById('runTitle').textContent = quest.practice ? quest.title+'（練習・保存しません）' : quest.title;
+  document.getElementById('runTitle').textContent = quest.networkSeries
+    ? `NW ${quest.networkQuestion.title}（${(quest.networkIndex || 0)+1} / ${quest.networkSeries.length}問）`
+    : quest.practice ? quest.title+'（練習・保存しません）' : quest.title;
   document.getElementById('btnCompleteQuest').textContent = quest.practice ? '練習を終了' : '保存して完了 ✅';
   document.getElementById('runCatTag').textContent = categoryName(quest.category);
   document.getElementById('runTypeTag').textContent = quest.type;
@@ -592,7 +619,9 @@ function startQuestRun(quest) {
     document.querySelectorAll('#evalPills .pill').forEach(p=>p.classList.remove('active'));
   }
 
-  startTimer(minutes);
+  document.getElementById('questRunCard').classList.toggle('quick-study', Boolean(quest.networkSeries));
+  if (quest.networkSeries) stopTimer();
+  else startTimer(minutes);
   mountNetworkExercise(quest);
   document.getElementById('questRunCard').scrollIntoView({ behavior: 'smooth' });
   answer.focus({ preventScroll: true });
@@ -764,6 +793,11 @@ function renderCompletion(data) {
     document.getElementById('btnCompRetry').textContent='この問題をもう一度';
   }
   document.getElementById('btnCompNext').textContent = network ? '同じ区分の次の問題へ' : '次のクエストへ';
+  if (STATE.currentQuest?.networkSeries) {
+    const at = (STATE.currentQuest.networkIndex || 0) + 1;
+    const total = STATE.currentQuest.networkSeries.length;
+    document.getElementById('btnCompNext').textContent = at < total ? `次の問題へ（${at+1} / ${total}）` : '選んだ問題数が完了 · もう一度選ぶ';
+  }
   const byJev = ev.decisionSource === 'jev';
   document.getElementById('compTitle').textContent = 'お疲れさまでした！';
   document.getElementById('compScoreTag').textContent = `理解度: ${SCORE_LABELS[ev.understandingScore] || ev.understandingScore}`;
@@ -824,11 +858,11 @@ function renderCompletion(data) {
   document.getElementById('completionBanner').scrollIntoView({ behavior: 'smooth' });
 }
 
-function startNetworkQuestion(q, retryOf, practice=false) {
+function startNetworkQuestion(q, retryOf, practice=false, networkSeries=null, networkIndex=0) {
   switchTab('quest');
   startQuestRun({
     type:'過去問を解く', category:'nw', title:`NW ${q.title}`, sourceRef:q.sourceLabel,
-    networkQuestion:q, practice,
+    networkQuestion:q, practice, networkSeries, networkIndex,
     questionText:`${q.sourceLabel}\n原本画像を読み、${q.kind==='choice'?'答えを思い出してから公式正解を見て、自己判定します。':'大問内の全設問に答えて、公式解答例で自己採点します。'}`,
     url:q.questionPdf, answerUrl:q.answerPdf, recommendedMinutes:q.minutes,
     itemId:q.itemId, historyId:retryOf || (q.attempted && !q.done ? q.historyId : null),
@@ -997,7 +1031,8 @@ function renderLearningLanes(content) {
     { name: '応用情報 午前 / 科目A-1', done: ap.studied, total: ap.total, detail: `定着 ${ap.mastered}問・復習待ち ${ap.due}問` },
     { name: '支援士 午前II / 科目A-2', done: sc.studied, total: sc.total, detail: `定着 ${sc.mastered}問・復習待ち ${sc.due}問` },
     { name: '支援士 記述 / 科目B', done: attemptedWritten, total: written.length, detail: '答案を書いて採点した問題' },
-    ...awsLanes
+    ...awsLanes,
+    ...(content.claude ? [{name:'Claude · CCDV-F',done:content.claude.stats.studied,total:content.claude.stats.total,detail:`定着 ${content.claude.stats.mastered}問・復習待ち ${content.claude.stats.due}問`}] : [])
   ];
   host.innerHTML = lanes.map(lane => `
     <div class="learning-lane">
@@ -1033,7 +1068,7 @@ async function updateReviewBadge() {
   try {
     const data = await api('/api/history');
     // 一問一答は「前回間違えて復習期限が来た問題」だけをバッジに数える
-    const quizWrongDue = (data.quizStats ? data.quizStats.wrongDue : 0) + (data.awsStats ? data.awsStats.wrongDue : 0) + (data.gcpStats ? data.gcpStats.wrongDue : 0);
+    const quizWrongDue = (data.quizStats ? data.quizStats.wrongDue : 0) + (data.awsStats ? data.awsStats.wrongDue : 0) + (data.gcpStats ? data.gcpStats.wrongDue : 0) + (data.claudeStats?.wrongDue || 0);
     const pendingCount = (data.history || []).filter(h => !isArchivedCategory(h.category)).filter(isPendingReview).length + quizWrongDue;
     const badge = document.getElementById('reviewCountBadge');
     badge.textContent = pendingCount;
@@ -1249,9 +1284,9 @@ function initQuiz() {
 }
 
 // クラウド資格の問題はオフライン用の保存（最大60問）の対象外。オフラインでは接続が必要と伝える
-const CLOUD_OFFLINE_MESSAGE = 'AWS・GCPの問題はオフラインでは使えません。オンラインに接続してからもう一度開いてください';
+const CLOUD_OFFLINE_MESSAGE = 'AWS・GCP・Claudeの問題はオフラインでは使えません。オンラインに接続してからもう一度開いてください';
 function isCloudExam(exam) {
-  return typeof exam === 'string' && (exam === 'aws' || exam.startsWith('aws-') || exam === 'gcp' || exam.startsWith('gcp-'));
+  return typeof exam === 'string' && (exam === 'claude' || exam.startsWith('claude-') || exam === 'aws' || exam.startsWith('aws-') || exam === 'gcp' || exam.startsWith('gcp-'));
 }
 
 async function startQuizRun(quest) {
@@ -1300,7 +1335,10 @@ async function startQuizRun(quest) {
   setHidden('completionBanner', true);
   setHidden('quizRunCard', false);
   document.getElementById('quizTitle').textContent = quest.title;
-  document.getElementById('quizCatTag').textContent = categoryName(['aws','gcp'].includes(quest.category) ? quest.category : 'sc');
+  document.getElementById('quizCatTag').textContent = categoryName(['aws','gcp','claude'].includes(quest.category) ? quest.category : 'sc');
+  const notice = document.getElementById('quizDeckNotice');
+  notice.textContent = cards.length < quiz.count ? '希望の' + quiz.count + '問のうち、出題できる' + cards.length + '問で始めます。' : '';
+  notice.hidden = !notice.textContent;
   renderQuizCard();
   document.getElementById('quizRunCard').scrollIntoView({ behavior: 'smooth' });
 }
@@ -1320,11 +1358,12 @@ function renderQuizCard() {
   document.getElementById('quizSourceLink').href = card.url;
   const isAws = card.family === 'aws';
   const isGcp = card.family === 'gcp';
-  const isCloud = isAws || isGcp;
+  const isClaude = card.family === 'claude';
+  const isCloud = isAws || isGcp || isClaude;
   // aws.amazon.com は「公式サイト」、docs.aws.amazon.com は「公式ドキュメント」と表記を分ける
   document.getElementById('quizSourceLink').textContent = isAws
     ? `AWS${card.sourceKind === 'site' ? '公式サイト' : '公式ドキュメント'}で確認する ↗`
-    : isGcp ? 'Google Cloud公式の試験ガイドで確認する ↗' : '元の過去問と解説を見る ↗';
+    : isGcp ? 'Google Cloud公式の試験ガイドで確認する ↗' : isClaude ? '公式資料で根拠を確認する ↗' : '元の過去問と解説を見る ↗';
   const sourceNote = document.getElementById('quizSourceNote');
   sourceNote.textContent = isCloud ? `オリジナル問題（公式問題ではありません）・${card.checkedAt} 確認` : '';
   sourceNote.hidden = !isCloud;
@@ -1580,11 +1619,11 @@ function renderQuizCompletion(data,quiz) {
     ? `復習: ${reviewParts.join('・')}` : '復習: 間隔をあけて再確認';
   document.getElementById('compSourceTag').textContent = ev.decisionSource === 'jev' ? '判定: 🧠 Jev (Score / Noul)'
     : ev.decisionSource === 'offline' ? '判定: 📴 オンライン復帰後に保存' : '判定: 📋 ルール';
-  const cloud = ['aws','gcp'].includes(data.history?.category) ? data.history.category : null;
+  const cloud = ['aws','gcp','claude'].includes(data.history?.category) ? data.history.category : null;
   const all = data.stats && data.stats[cloud || 'all'];
   const weak = (data.weakFields || []).map(f => `${f.name}（${Math.round(f.accuracy * 100)}%）`).join('、');
   document.getElementById('compMessage').textContent = data.message || (all
-    ? `${cloud ? `${cloud.toUpperCase()}一問一答（全コース）` : '一問一答'}の学習済み: ${all.studied} / ${all.total}問（定着 ${all.mastered}問）。${weak ? `弱点の${cloud ? '領域' : '分野'}: ${weak}。` : ''}覚えていた問題も 3日後・7日後…と間隔をあけて再確認します。`
+    ? `${cloud === 'claude' ? 'Claude · CCDV-F' : cloud ? `${cloud.toUpperCase()}一問一答（全コース）` : '一問一答'}の学習済み: ${all.studied} / ${all.total}問（定着 ${all.mastered}問）。${weak ? `弱点の${cloud ? '領域' : '分野'}: ${weak}。` : ''}覚えていた問題も 3日後・7日後…と間隔をあけて再確認します。`
     : '');
   setHidden('compAnswerNotes', true);
   setHidden('compKeywordBox', true);
@@ -1704,6 +1743,16 @@ async function loadLibrary() {
     renderNetworkList();
     renderAwsCourses(data.aws);
     renderGcpCourses(data.gcp);
+    if (data.claude) {
+      const s = data.claude.stats;
+      document.getElementById('claudeStats').textContent = `学習済み ${s.studied} / ${s.total}問 · 復習待ち ${s.due}問`;
+      for (const [id,mode] of [['btnClaudeStudy','practice'],['btnCcdvfReview','review']]) {
+        document.getElementById(id).onclick = () => {
+          switchTab('quest');
+          startQuizRun({type:'一問一答',category:'claude',title:'Claude · CCDV-F',quiz:{exam:'claude-ccdvf',mode,count:STATE.conditions.count},decisionSource:'manual'});
+        };
+      }
+    }
     applyBarWidths();
     loadItemList();
   } catch (e) {

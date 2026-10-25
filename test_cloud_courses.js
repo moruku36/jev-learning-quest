@@ -14,7 +14,7 @@ assert.deepEqual(GCP_COURSES.map(c => c.id), ['gai','cdl','ace','pca']);
 assert.deepEqual(GCP_COURSES.map(c => c.rows.length), [30,30,30,30]);
 assert.equal(AWS_CARDS.filter(c => c.course === 'aif').length, 35);
 assert.equal(GCP_CARDS.length, 120);
-assert.equal(QUIZ_CARD_MAP.size, 1308);
+assert.equal([...QUIZ_CARD_MAP.values()].filter(c => c.family !== 'claude').length, 1308);
 assert.deepEqual(GCP_COURSES.map(c => c.domains.reduce((n,d) => n+d.weight,0)), [100,100,100,100]);
 for (const course of [...GCP_COURSES, AWS_COURSES[0]]) {
   const cards = (course.exam.startsWith('gcp-') ? GCP_CARDS : AWS_CARDS).filter(c => c.exam === course.exam);
