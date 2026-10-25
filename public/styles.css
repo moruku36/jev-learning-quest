@@ -2224,3 +2224,20 @@ kbd {
 @media (max-width: 480px) {
   .aws-course-grid { grid-template-columns:1fr; }
 }
+
+/* Quick study: keep the original Jev palette and make the two choices easy to scan. */
+.study-count { width: auto; min-width: 100px; }
+.study-hint { flex-basis: 100%; margin: 0; color: var(--text-muted, #94a3b8); font-size: .9rem; }
+.selection-note summary { cursor: pointer; }
+.filter-bar { align-items: flex-start; }
+.view-panel:has(#quizRunCard:not([hidden])) .filter-bar { display: none; }
+.quest-details { margin: 12px 0 20px; }
+.quest-details > summary { cursor: pointer; }
+.quest-details .quest-summary-box { margin-top: 12px; }
+.quiz-source, #quizSourceTag { white-space: normal; }
+.quiz-question, .quiz-answer-text, #quizExplanation { overflow-wrap: anywhere; }
+button:focus-visible, select:focus-visible, summary:focus-visible { outline: 3px solid #38bdf8; outline-offset: 3px; }
+/* Question-count sessions do not need a countdown. Written practice keeps its timer. */
+#questRunCard.quick-study .timer-widget,
+#questRunCard.quick-study > .timer-bar { display: none; }
+#view-quest:has(#questRunCard.quick-study:not([hidden])) .filter-bar { display: none; }

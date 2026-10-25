@@ -1,7 +1,7 @@
 // Code-only regression for the quiz self-judge guards. A controllable clock and timer queue make the
 // 600ms boundary exact; real-browser timing, focus and layout stay with test_learning_ui.js.
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
-const { GCP_CARDS } = require('./lib/content');
+const { GCP_CARDS, CLAUDE_CARDS } = require('./lib/content');
 function harness(){
   const answersQueue=[],nodes=new Map(),timers=[],toasts=[],apiCalls=[];let clock=1_000_000,prompts=0,keydown=null,apiImpl=async()=>({});
   class FakeDate extends Date{static now(){return clock;}}
@@ -124,7 +124,7 @@ const idx=h=>h.run('STATE.quiz.index'),answers=h=>JSON.parse(h.run('JSON.stringi
     h.ctx.__quiz = quiz;
     await h.run("startQuizRun({ type: '一問一答', category: __quiz.exam.startsWith('gcp') ? 'gcp' : 'aws', title: 'Cloud offline', quiz: __quiz })");
     assert.equal(h.run('STATE.quiz'), null, `${quiz.exam}/${quiz.mode}: オフラインでは始めない`);
-    assert(h.toasts.some(m => /AWS・GCPの問題はオフラインでは使えません/.test(m) && /オンライン/.test(m)), 'オンライン接続が必要と伝える');
+    assert(h.toasts.some(m => /AWS・GCP・Claudeの問題はオフラインでは使えません/.test(m) && /オンライン/.test(m)), 'オンライン接続が必要と伝える');
     assert(!h.toasts.some(m => WRONG_MESSAGES.test(m)), `${quiz.exam}/${quiz.mode}: 「問題がない」「弱点がない」と誤表示しない`);
     assert.equal(h.apiCalls.length, 0, 'オフライン中はAPIを呼ばない');
   }
@@ -135,7 +135,7 @@ const idx=h=>h.run('STATE.quiz.index'),answers=h=>JSON.parse(h.run('JSON.stringi
   await h.run("startQuizRun({ type: '一問一答', category: 'aws', title: 'AWS net down', quiz: __quiz })");
   assert.equal(h.run('STATE.quiz'), null);
   assert.equal(h.run('STATE.offline'), true, '通信失敗でオフライン状態になる');
-  assert(h.toasts.some(m => /AWS・GCPの問題はオフラインでは使えません/.test(m)));
+  assert(h.toasts.some(m => /AWS・GCP・Claudeの問題はオフラインでは使えません/.test(m)));
   assert(!h.toasts.some(m => WRONG_MESSAGES.test(m)));
   // オンラインに戻ったら、同じ操作で出題できる
   h.run('STATE.offline=false');
@@ -152,5 +152,15 @@ const idx=h=>h.run('STATE.quiz.index'),answers=h=>JSON.parse(h.run('JSON.stringi
   assert(h.toasts.some(m => /オフライン用の問題がありません/.test(m)), 'IPAは従来の案内');
   assert(!h.toasts.some(m => /AWS・GCPの問題はオフラインでは使えません/.test(m)));
 
-  console.log('Quiz guard VM tests passed: 600ms boundary, GCP reveal/next, repeat keys, focused controls, quit/retry, cloud offline guidance.');
+  h=harness();h.ctx.__claudeCards=CLAUDE_CARDS.slice(0,2);
+  h.setApi(async()=>({cards:CLAUDE_CARDS.slice(0,2)}));
+  await h.run("startQuizRun({type:'一問一答',category:'claude',title:'CCDV-F',quiz:{exam:'claude-ccdvf',count:20}})");
+  assert.equal(h.el('quizDeckNotice').hidden,false);
+  assert.match(h.el('quizDeckNotice').textContent,/20問.*2問/);
+  assert.match(h.el('quizCatTag').textContent,/Claude/);
+  assert.match(h.el('quizSourceLink').textContent,/公式資料/);
+  h.run("renderQuizCompletion({summary:'2問完了',history:{category:'claude'},stats:{claude:{studied:2,total:32,mastered:0},all:{studied:0,total:1050,mastered:0}},wrongCards:[],evaluation:{}},STATE.quiz)");
+  assert.match(h.el('compMessage').textContent,/Claude.*2 \/ 32/);
+  assert(!h.el('compMessage').textContent.includes('1050'));
+  console.log('Quiz guard VM tests passed: 600ms boundary, GCP/Claude reveal/next, repeat keys, focused controls, quit/retry, offline guidance, short-deck notice and completion scope.');
 })().catch(e=>{console.error(e);process.exitCode=1;});
