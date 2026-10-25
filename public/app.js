@@ -335,7 +335,7 @@ function initFilterPills() {
   selectPill('claudeCoursePills', STATE.conditions.claudeCourse);
   const countSelect = document.getElementById('studyCount');
   const savedCount = Number(storageGet('jlq.studyCount'));
-  STATE.conditions.count = [5,10,20,30].includes(savedCount) ? savedCount : 20;
+  STATE.conditions.count = [5,10,20,30,50,100].includes(savedCount) ? savedCount : 20;
   countSelect.value = String(STATE.conditions.count);
   countSelect.addEventListener('change', () => {
     STATE.conditions.count = Number(countSelect.value);
@@ -886,7 +886,8 @@ function renderNetworkList() {
   const filter=STATE.nwFilter || 'all';
   const qs=all.filter(q=>q.year===year&&q.part===part&&(filter==='all'||filter==='todo'&&!q.attempted||filter==='review'&&q.attempted&&!q.done||filter==='done'&&q.done));
   const list=document.getElementById('nwList');
-  list.innerHTML=qs.length ? qs.map(q=>`<div class="reading-row"><div class="reading-main"><div class="reading-tags"><span class="tag tag-cat">${escapeHtml(q.title)}</span><span class="tag tag-time">${q.minutes}分</span><span class="tag tag-source">${q.done?'できた':q.attempted?'要復習':'未着手'}</span></div><p class="reading-focus">${escapeHtml(q.note)} ・ <a class="run-link" href="${escapeHtml(q.questionPdf)}" target="_blank" rel="noopener noreferrer">公式問題冊子 ↗</a></p></div><button class="btn btn-secondary btn-sm" data-nw="${escapeHtml(q.itemId)}" type="button">${q.attempted?'もう一度解く':'解く'}</button></div>`).join('') : '<p class="text-muted">この条件に該当する問題はありません。</p>';
+  const visible=pageRows(qs,'nw',[year,part,filter].join(':'));
+  list.innerHTML=qs.length ? visible.map(q=>`<div class="reading-row"><div class="reading-main"><div class="reading-tags"><span class="tag tag-cat">${escapeHtml(q.title)}</span><span class="tag tag-time">${q.minutes}分</span><span class="tag tag-source">${q.done?'できた':q.attempted?'要復習':'未着手'}</span></div><p class="reading-focus">${escapeHtml(q.note)} ・ <a class="run-link" href="${escapeHtml(q.questionPdf)}" target="_blank" rel="noopener noreferrer">公式問題冊子 ↗</a></p></div><button class="btn btn-secondary btn-sm" data-nw="${escapeHtml(q.itemId)}" type="button">${q.attempted?'もう一度解く':'解く'}</button></div>`).join('') : '<p class="text-muted">この条件に該当する問題はありません。</p>';
   list.querySelectorAll('[data-nw]').forEach(btn=>btn.addEventListener('click',()=>startNetworkQuestion(all.find(q=>q.itemId===btn.dataset.nw))));
 }
 
@@ -1651,7 +1652,43 @@ function renderQuizReviewCard(stats) {
 }
 
 // --- 9. 教材タブ ---
+function libraryCount() { return Number(document.getElementById('libraryCount').value) || 20; }
+function showLibrarySection(value, focus = false) {
+  document.querySelectorAll('[data-library-section]').forEach(el => { el.hidden = el.dataset.librarySection !== value; });
+  storageSet('jlq.librarySection', value);
+  if (focus) document.querySelector('[data-library-section="'+value+'"] .card-heading')?.focus();
+}
+function pageRows(rows, key, resetKey) {
+  STATE.libraryPages ||= {};
+  let page = STATE.libraryPages[key] || { index:0, filter:resetKey };
+  if (page.filter !== resetKey) page = { index:0, filter:resetKey };
+  const size=2, pages=Math.max(1,Math.ceil(rows.length/size));
+  page.index=Math.max(0,Math.min(page.index,pages-1)); STATE.libraryPages[key]=page;
+  document.getElementById(key+'PageStatus').textContent = rows.length ? (page.index*size+1)+'–'+Math.min((page.index+1)*size,rows.length)+' / '+rows.length+'件（'+(page.index+1)+' / '+pages+'ページ）' : '0件';
+  document.getElementById(key+'Prev').disabled=page.index===0;
+  document.getElementById(key+'Next').disabled=page.index>=pages-1;
+  return rows.slice(page.index*size,(page.index+1)*size);
+}
 function initLibrary() {
+  const section=document.getElementById('librarySection');
+  const saved=storageGet('jlq.librarySection');
+  if ([...section.options].some(o=>o.value===saved)) section.value=saved;
+  document.querySelectorAll('[data-library-section] .card-heading').forEach(h=>h.tabIndex=-1);
+  showLibrarySection(section.value);
+  section.addEventListener('change',()=>showLibrarySection(section.value,true));
+  const savedCount=Number(storageGet('jlq.libraryCount'));
+  const countSelect=document.getElementById('libraryCount');
+  countSelect.value=String([5,10,20,30,50,100].includes(savedCount)?savedCount:STATE.conditions.count);
+  countSelect.addEventListener('change',()=>storageSet('jlq.libraryCount',countSelect.value));
+  for (const cloud of ['aws','gcp']) document.getElementById(cloud+'LibraryCourse').addEventListener('change',()=>renderCloudCourses(cloud,STATE.library?.[cloud]));
+  for (const key of ['nw','written']) for (const [suffix,delta] of [['Prev',-1],['Next',1]]) {
+    document.getElementById(key+suffix).addEventListener('click',()=>{
+      if(!STATE.libraryPages?.[key])return;
+      STATE.libraryPages[key].index+=delta;
+      if(key==='nw')renderNetworkList();else renderWrittenList();
+      document.getElementById(key+'PageStatus').focus();
+    });
+  }
   ['nwYear','nwPart'].forEach(id=>document.getElementById(id).addEventListener('change',renderNetworkList));
   setupPills('nwFilterPills', val=>{ STATE.nwFilter=val; renderNetworkList(); });
   const formatSelect = document.getElementById('libFormat');
@@ -1666,7 +1703,7 @@ function initLibrary() {
     const group = groupSelect.value;
     const mode = document.getElementById('libMode').value;
     const format = formatSelect.value;
-    const count = parseInt(document.getElementById('libCount').value, 10);
+    const count = libraryCount();
     const examName = { all: '応用情報 午前 + 支援士 午前II', sc: '支援士 午前II', ap: '応用情報 午前' }[exam];
     const labels = [session === 'all' ? '過去5年分' : sessionSelect.selectedOptions[0].textContent];
     if (mode === 'weak') labels.push('弱点分野');
@@ -1749,7 +1786,7 @@ async function loadLibrary() {
       for (const [id,mode] of [['btnClaudeStudy','practice'],['btnCcdvfReview','review']]) {
         document.getElementById(id).onclick = () => {
           switchTab('quest');
-          startQuizRun({type:'一問一答',category:'claude',title:'Claude · CCDV-F',quiz:{exam:'claude-ccdvf',mode,count:STATE.conditions.count},decisionSource:'manual'});
+          startQuizRun({type:'一問一答',category:'claude',title:'Claude · CCDV-F',quiz:{exam:'claude-ccdvf',mode,count:libraryCount()},decisionSource:'manual'});
         };
       }
     }
@@ -1793,6 +1830,7 @@ function renderFieldStats(fields) {
 
 function renderReports(reports) {
   STATE.reports = reports;
+  setHidden('emptyReports', reports.length !== 0);
   setHidden('reportCard', reports.length === 0);
   document.getElementById('reportCount').textContent = `${reports.length}件`;
   const list = document.getElementById('reportList');
@@ -1847,11 +1885,12 @@ function renderWrittenList() {
   document.getElementById('writtenCount').textContent = `演習済み ${written.filter(w => w.attempted).length} / ${written.length}問`;
   const filtered = written.filter(w => filter === 'all' || (filter === 'done' ? w.attempted : !w.attempted));
   const list = document.getElementById('writtenList');
+  const visible = pageRows(filtered, 'written', filter);
   if (filtered.length === 0) {
     list.innerHTML = `<p class="text-muted">${filter === 'done' ? 'まだ演習した問題はありません' : 'すべて演習しました 🎉'}</p>`;
     return;
   }
-  list.innerHTML = filtered.map(w => `
+  list.innerHTML = visible.map(w => `
     <div class="reading-row">
       <div class="reading-main">
         <div class="reading-tags">
@@ -1920,7 +1959,11 @@ function renderCloudCourses(cloud, data) {
     return;
   }
   document.getElementById(`${cloud}Count`).textContent = `学習済み ${data.stats.studied} / ${data.stats.total}問`;
-  grid.innerHTML = data.courses.map(c => {
+  const select=document.getElementById(cloud+'LibraryCourse');
+  const selected=select.value;
+  select.innerHTML=data.courses.map(c=>'<option value="'+escapeHtml(c.id)+'">'+escapeHtml(c.examCode+' · '+c.level)+'</option>').join('');
+  if(data.courses.some(c=>c.id===selected))select.value=selected;
+  grid.innerHTML = data.courses.filter(c=>c.id===select.value).map(c => {
     const pct = c.stats.total ? Math.round((c.stats.studied / c.stats.total) * 100) : 0;
     const weak = c.fields.filter(f => f.weak);
     const domains = c.fields.map(f => {
@@ -1935,12 +1978,12 @@ function renderCloudCourses(cloud, data) {
           <span class="count-label">${c.stats.studied} / ${c.stats.total}問</span>
         </div>
         <p class="aws-course-name">${escapeHtml(c.name)}</p>
-        ${c.notice ? `<p class="field-hint">${escapeHtml(c.notice)}</p>` : ''}
+        ${c.notice ? `<details class="library-details"><summary>試験範囲の注意</summary><p class="field-hint">${escapeHtml(c.notice)}</p></details>` : ''}
         <div class="quiz-stat-bar"><div data-pct="${pct}"></div></div>
         <div class="quiz-stat-meta">定着 ${c.stats.mastered}問 ・ 復習待ち ${c.stats.due}問（うち覚えていない ${c.stats.wrongDue}問）</div>
-        <ul class="aws-domains">${domains}</ul>
+        <details class="library-details"><summary>領域ごとの進捗・出典</summary><ul class="aws-domains">${domains}</ul><a class="run-link" href="${escapeHtml(c.guideUrl)}" target="_blank" rel="noopener noreferrer">公式試験ガイド ↗</a></details>
         <div class="aws-course-actions">
-          <button class="btn btn-primary btn-sm" type="button" data-mode="mix">▶ 新しい問題</button>
+          <button class="btn btn-primary btn-sm" type="button" data-mode="practice">▶ はじめる</button>
           <button class="btn btn-secondary btn-sm" type="button" data-mode="review"${c.stats.due ? '' : ' disabled'}>復習 ${c.stats.due}問</button>
           <button class="btn btn-secondary btn-sm" type="button" data-mode="weak"${weak.length ? '' : ' disabled'}>弱点の領域</button>
         </div>
@@ -1950,7 +1993,7 @@ function renderCloudCourses(cloud, data) {
   grid.querySelectorAll('.aws-course').forEach(card => {
     const course = data.courses.find(c => c.id === card.getAttribute('data-course'));
     card.querySelectorAll('button[data-mode]').forEach(btn => {
-      btn.addEventListener('click', () => startCloudQuiz(cloud, course.exam, `${course.examCode} ${course.level}`, btn.getAttribute('data-mode')));
+      btn.addEventListener('click', () => startCloudQuiz(cloud, course.exam, `${course.examCode} ${course.level}`, btn.getAttribute('data-mode'),libraryCount()));
     });
   });
 }

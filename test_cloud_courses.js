@@ -11,10 +11,10 @@ const { quizStats } = require('./lib/quiz');
 
 assert.deepEqual(AWS_COURSES.map(c => c.id), ['aif','clf','saa','sap']);
 assert.deepEqual(GCP_COURSES.map(c => c.id), ['gai','cdl','ace','pca']);
-assert.deepEqual(GCP_COURSES.map(c => c.rows.length), [30,30,30,30]);
-assert.equal(AWS_CARDS.filter(c => c.course === 'aif').length, 35);
-assert.equal(GCP_CARDS.length, 120);
-assert.equal([...QUIZ_CARD_MAP.values()].filter(c => c.family !== 'claude').length, 1308);
+assert.deepEqual(GCP_COURSES.map(c => c.rows.length), [100,100,100,100]);
+assert.equal(AWS_CARDS.filter(c => c.course === 'aif').length, 100);
+assert.equal(GCP_CARDS.length, 400);
+assert.equal([...QUIZ_CARD_MAP.values()].filter(c => c.family !== 'claude').length, 1850);
 assert.deepEqual(GCP_COURSES.map(c => c.domains.reduce((n,d) => n+d.weight,0)), [100,100,100,100]);
 for (const course of [...GCP_COURSES, AWS_COURSES[0]]) {
   const cards = (course.exam.startsWith('gcp-') ? GCP_CARDS : AWS_CARDS).filter(c => c.exam === course.exam);
@@ -24,11 +24,11 @@ for (const course of [...GCP_COURSES, AWS_COURSES[0]]) {
   assert(course.domains.every(d => cards.some(c => c.domain === d.id)));
   assert.equal(new Set(cards.map(c => c.question)).size, cards.length);
   assert(cards.every(c => c.answer.length <= 160));
-  assert(cards.every(c => c.sources.every(u => /^https:\/\/(services\.google\.com|docs\.aws\.amazon\.com|aws\.amazon\.com)\//.test(u))));
+  assert(cards.every(c => c.sources.every(u => /^https:\/\/(services\.google\.com|cloud\.google\.com|docs\.cloud\.google\.com|ai\.google\.dev|docs\.aws\.amazon\.com|aws\.amazon\.com)\//.test(u))));
 }
 assert.equal(quizStats({quizProgress:{}}).all.total,1050,'IPA問題数は変わらない');
-assert.equal(quizStats({quizProgress:{}}).aws.total,138);
-assert.equal(quizStats({quizProgress:{}}).gcp.total,120);
+assert.equal(quizStats({quizProgress:{}}).aws.total,400);
+assert.equal(quizStats({quizProgress:{}}).gcp.total,400);
 
 const html = fs.readFileSync(path.join(__dirname,'public/index.html'),'utf8');
 for (const [pill, values] of [
@@ -55,8 +55,8 @@ assert(/id="catPills">[\s\S]*?data-val="gcp"/.test(html));
   try {
     const content = (await call('/api/content')).data;
     assert.deepEqual(content.gcp.courses.map(c => c.id),['gai','cdl','ace','pca']);
-    assert.equal(content.gcp.stats.total,120);
-    assert.equal(content.aws.stats.total,138);
+    assert.equal(content.gcp.stats.total,400);
+    assert.equal(content.aws.stats.total,400);
     assert.equal(content.quiz.stats.all.total,1050);
     for (const exam of ['aws-aif',...GCP_COURSES.map(c => c.exam)]) {
       const deck = (await call(`/api/quiz/deck?exam=${exam}&count=10`)).data.cards;

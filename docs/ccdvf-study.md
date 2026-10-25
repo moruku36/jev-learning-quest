@@ -1,3 +1,5 @@
+> 初回リリース時の記録です。現在は100問・最大100問セッションに拡張しています。最新の件数と検証範囲は [問題拡充の記録](exam-expansion.md) を参照してください。
+
 # 一問一答の簡素化と Claude CCDV-F
 
 確認日: 2026-10-25。追加資格は Anthropic の **Claude Certified Developer – Foundations（CCDV-F）**。クラウド資格ではありません。

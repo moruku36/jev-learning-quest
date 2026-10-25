@@ -25,13 +25,13 @@ for (const course of AWS_COURSES.filter(c => c.id !== 'aif')) {
   assert.equal(course.domains.reduce((n, d) => n + d.weight, 0), 100);
   const cards = AWS_CARDS.filter(c => c.course === course.id);
   for (const d of course.domains) {
-    assert.equal(cards.filter(c => c.domain === d.id).length, exp.counts[d.id], `${course.id} ${d.id} の問題数`);
+    assert(cards.filter(c => c.domain === d.id).length >= exp.counts[d.id], `${course.id} ${d.id} の問題数`);
   }
-  assert(cards.length >= 30, `${course.id}: 実際に学べる規模`);
+  assert.equal(cards.length, 100, `${course.id}: 実際に学べる規模`);
   assert(cards.every(c => c.sources.length >= 1 && c.sources[0] === c.url));
   assert(/^https:\/\/docs\.aws\.amazon\.com\/aws-certification\/latest\//.test(course.guideUrl), '試験ガイドはAWS公式');
 }
-assert.equal(AWS_CARDS.length, 138);
+assert.equal(AWS_CARDS.length, 400);
 assert.match(AWS_COURSES.find(c => c.id === 'sap').notice, /SAP-C03/, '次期試験は注記にとどめ、現行コードで作る');
 assert(!AWS_COURSES.some(c => /C03/.test(c.examCode) && c.id === 'sap'));
 
@@ -56,10 +56,10 @@ for (const id of ['saa', 'sap']) {
   const cards = AWS_CARDS.filter(c => c.course === id);
   assert(cards.filter(c => c.kind === 'scenario').length / cards.length >= 0.7, `${id}: 状況設計型の割合`);
 }
-// 近似重複（同じ答えの問題）と欠番: IDは詰めず、削除しても学習済みの問題のIDが変わらない
+// コース内の近似重複と欠番。別試験でも必要な共通知識は、各コースで扱える。
 const answers = new Map();
 for (const c of AWS_CARDS) {
-  const key = c.answer.replace(/[\s。、]/g, '');
+  const key = c.course + ':' + c.answer.replace(/[\s。、]/g, '');
   assert(!answers.has(key), `答えが同一の近似重複: ${c.id} と ${answers.get(key)}`);
   answers.set(key, c.id);
 }
@@ -101,7 +101,7 @@ const sapSource = fs.readFileSync(path.join(__dirname, 'lib/content/aws/sap-c02.
 assert(!/トレードオフを(問う|答える)/.test(sapSource));
 
 // 旧IPA問題IDと衝突しない
-assert.equal(QUIZ_CARDS.filter(c => c.family !== 'claude').length, 1050 + 138 + 120);
+assert.equal(QUIZ_CARDS.filter(c => c.family !== 'claude').length, 1050 + 400 + 400);
 assert.equal(QUIZ_CARD_MAP.size, QUIZ_CARDS.length);
 assert(AWS_CARDS.every(c => !/^(sc|ap)-/.test(c.id)));
 
@@ -158,8 +158,8 @@ assert(pills.length > 0);
     assert.equal(c0.quiz.stats.all.total, 1050, '従来の集計（IPA）は変わらない');
     assert.equal(c0.quiz.stats.all.studied, 1);
     assert.equal(c0.aws.courses.length, 4);
-    assert.deepEqual(c0.aws.courses.map(c => c.stats.total), [35, 39, 34, 30]);
-    assert.equal(c0.aws.stats.total, 138);
+    assert.deepEqual(c0.aws.courses.map(c => c.stats.total), [100, 100, 100, 100]);
+    assert.equal(c0.aws.stats.total, 400);
     assert(c0.aws.courses.every(c => c.fields.length === c.domains.length));
     const h0 = (await call('/api/history')).data;
     assert(!h0.history.some(h => ARCHIVED_CATEGORIES.includes(h.category)), '履歴一覧に旧分野は出ない');
