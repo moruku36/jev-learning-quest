@@ -2241,3 +2241,34 @@ button:focus-visible, select:focus-visible, summary:focus-visible { outline: 3px
 #questRunCard.quick-study .timer-widget,
 #questRunCard.quick-study > .timer-bar { display: none; }
 #view-quest:has(#questRunCard.quick-study:not([hidden])) .filter-bar { display: none; }
+/* Library: one selected collection, readable controls and bounded lists. */
+.library-toolbar { display: grid; grid-template-columns: minmax(180px, 1fr) 140px; gap: 16px; margin-bottom: 16px; }
+.app-container:has(#view-library.active) { padding-bottom: 16px; }
+@media (min-width: 900px) {
+  #view-library .panel-header { display:flex; align-items:baseline; gap:16px; }
+  .library-toolbar > div { display:flex; align-items:center; gap:10px; }
+  .library-toolbar .input-label { white-space:nowrap; margin:0; }
+  .library-toolbar { grid-template-columns: minmax(180px,1fr) 200px; }
+}
+#view-library .card { margin-bottom: 0; padding: 18px; }
+#view-library .panel-header { margin-bottom: 12px; }
+#view-library .aws-course-grid { display: block; margin-top: 12px; }
+#view-library .aws-course { padding: 14px; }
+#view-library .library-details { margin: 8px 0; }
+.library-details > summary { cursor: pointer; color: var(--text-muted); font-size: 14px; }
+.library-details[open] { max-height: 32vh; overflow-y: auto; padding: 4px; border: 1px solid var(--border); border-radius: 6px; }
+.library-details .text-desc, .library-details .field-hint { margin: 8px 0; }
+#view-library .reading-row { padding: 10px; }
+#view-library .reading-list { max-height: none; overflow: visible; gap: 6px; }
+.library-page-heading { margin: 8px 0; color: var(--text-muted); font-size: 14px; }
+.library-pager { display:flex; gap:12px; justify-content:space-between; margin-top:10px; }
+#view-library .reading-filter { margin: 10px 0; }
+#view-library .card-heading:focus, .library-page-heading:focus { outline: 2px solid var(--accent-blue); outline-offset: 4px; }
+#view-library [data-library-section="stats"], #view-library [data-library-section="reports"] { max-height: 60vh; overflow: auto; }
+@media (max-width: 600px) {
+  .library-toolbar { grid-template-columns: minmax(0,1fr) 100px; gap:10px; }
+  #view-library .card { padding:14px; }
+  #view-library .aws-course-actions { flex-wrap:wrap; }
+  .library-details[open] { max-height:none; }
+  #view-library [data-library-section="stats"], #view-library [data-library-section="reports"] { max-height:none; }
+}

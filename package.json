@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node test_verification.js && node test_update_readings.js && node test_network_exams.js && node test_run_transitions.js && node test_quiz_guard.js && node test_aws_courses.js && node test_cloud_courses.js && node test_ccdvf.js",
+    "test": "node test_verification.js && node test_update_readings.js && node test_network_exams.js && node test_run_transitions.js && node test_quiz_guard.js && node test_aws_courses.js && node test_cloud_courses.js && node test_ccdvf.js && node test_library_paging.js && node test_expanded_content.js",
     "update-readings": "node scripts/update-readings.js",
     "check": "node --check public/app.js && node --check public/nw-exercise.js && node --check public/sw.js && node --check lib/quest-engine.js && node --check test_learning_ui.js"
   },

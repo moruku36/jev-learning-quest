@@ -124,7 +124,7 @@
           </div>
           <div class="filter-group">
             <label class="filter-label" for="studyCount">問題数</label>
-            <select id="studyCount" class="simple-input study-count"><option value="5">5問</option><option value="10">10問</option><option value="20" selected>20問</option><option value="30">30問</option></select>
+            <select id="studyCount" class="simple-input study-count"><option value="5">5問</option><option value="10">10問</option><option value="20" selected>20問</option><option value="30">30問</option><option value="50">50問</option><option value="100">100問</option></select>
           </div>
           <p class="study-hint">Jev が問題を選びます。わからなければ、すぐに答えを見て大丈夫。</p>
         </div>
@@ -348,38 +348,47 @@
       <section id="view-library" class="view-panel">
         <div class="panel-header">
           <h2>試験問題</h2>
-          <p class="panel-sub">年度と時間区分から選んで演習し、答案と復習を残します。</p>
+          <p class="panel-sub">分野とコースを選んで、気になる問題から始めましょう。</p>
         </div>
 
+        <div class="library-toolbar">
+          <div><label class="input-label" for="librarySection">分野・一覧</label><select id="librarySection" class="simple-input"><option value="aws">AWS</option><option value="gcp">GCP</option><option value="claude">Claude</option><option value="nw">ネットワーク</option><option value="ipa">支援士・応用情報 一問一答</option><option value="written">支援士 記述式</option><option value="stats">分野別の正答率</option><option value="reports">報告した問題</option><option value="info">公式の試験案内</option></select></div>
+          <div><label class="input-label" for="libraryCount">問題数</label><select id="libraryCount" class="simple-input"><option value="5">5問</option><option value="10">10問</option><option value="20" selected>20問</option><option value="30">30問</option><option value="50">50問</option><option value="100">100問</option></select></div>
+        </div>
+        <div data-library-section="claude" hidden>
         <div class="card" id="claudeCourseCard">
           <h3 class="card-heading">Claude · CCDV-F</h3>
-          <p class="text-desc">Claude Certified Developer – Foundations。公式8領域に沿った独自の日本語練習問題32問。公式試験問題ではなく、合否を予測するものでもありません。</p>
+          <details class="library-details"><summary>教材について</summary><p class="text-desc">Claude Certified Developer – Foundations。公式8領域に沿った独自の日本語練習問題100問。公式試験問題ではなく、合否を予測するものでもありません。</p></details>
           <p id="claudeStats" class="field-hint"></p>
           <div class="btn-group-row"><button class="btn btn-primary" id="btnClaudeStudy" type="button">一問一答をはじめる</button><button class="btn btn-secondary" id="btnCcdvfReview" type="button">復習待ちを解く</button></div>
-          <p class="field-hint">問題数は「学ぶ」で選んだ数を使います。各問題の解説から公式資料を確認できます。</p>
+          <details class="library-details"><summary>教材について</summary><p class="field-hint">問題数は上の選択を使います。各問題の解説から公式資料を確認できます。</p></details>
         </div>
 
+        </div>
+        <div data-library-section="nw" hidden>
         <div class="card nw-card">
           <div class="card-title-row"><h3 class="card-heading">ネットワークスペシャリスト 過去5年</h3><span class="count-label" id="nwCount"></span></div>
-          <p class="text-desc">2021〜2025年春期の午前Ⅰ・午前Ⅱ・午後Ⅰ・午後Ⅱ、全300問題単位。問題本文・選択肢・図表を画面内のIPA原本画像で読みます。午前275問は選択回答を自動採点、午後25問は設問ごとの答案・自己採点・復習を保存します。午後は大問内の全設問を解きます。</p>
+          <details class="library-details"><summary>教材・区分別の進捗について</summary><p class="text-desc">2021〜2025年春期の午前Ⅰ・午前Ⅱ・午後Ⅰ・午後Ⅱ、全300問題単位。問題本文・選択肢・図表を画面内のIPA原本画像で読みます。午前275問は選択回答を自動採点、午後25問は設問ごとの答案・自己採点・復習を保存します。午後は大問内の全設問を解きます。</p>
           <p class="field-hint">午後の自己採点は公式得点ではありません。問題本文は画像のため、全文検索・読み上げには未対応です。公式解答例は設問別の文字表示もあります。2026年の実問題は含みません。</p>
           <div class="learning-lanes" id="nwProgress"></div>
+</details>
           <div class="form-row-2col">
             <div><label class="input-label" for="nwYear">年度</label><select id="nwYear" class="simple-input"><option value="2025">2025年 / 令和7年 春期</option><option value="2024">2024年 / 令和6年 春期</option><option value="2023">2023年 / 令和5年 春期</option><option value="2022">2022年 / 令和4年 春期</option><option value="2021">2021年 / 令和3年 春期</option></select></div>
             <div><label class="input-label" for="nwPart">時間区分</label><select id="nwPart" class="simple-input"><option value="am2">午前Ⅱ（専門・25問）</option><option value="am1">午前Ⅰ（共通・30問）</option><option value="pm1">午後Ⅰ（3大問）</option><option value="pm2">午後Ⅱ（2大問）</option></select></div>
           </div>
           <div class="pill-group reading-filter" id="nwFilterPills"><button class="pill active" data-val="all">すべて</button><button class="pill" data-val="todo">未着手</button><button class="pill" data-val="review">要復習</button><button class="pill" data-val="done">できた</button></div>
-          <div class="reading-list" id="nwList"></div>
-          <a class="run-link" href="https://www.nw-siken.com/nwkakomon.php" target="_blank" rel="noopener noreferrer">参考: ネットワークスペシャリスト試験ドットコム ↗</a>
+          <div class="library-page-heading" id="nwPageStatus" role="status" tabindex="-1"></div><div class="reading-list" id="nwList"></div><nav class="library-pager" aria-label="ネットワーク問題のページ"><button type="button" class="btn btn-secondary btn-sm" id="nwPrev">前のページ</button><button type="button" class="btn btn-secondary btn-sm" id="nwNext">次のページ</button></nav>
         </div>
+        </div>
+        <div data-library-section="ipa" hidden>
         <div class="card">
           <h3 class="card-heading">📝 一問一答（過去問5年分）</h3>
-          <p class="text-desc">
+          <details class="library-details"><summary>教材について</summary><p class="text-desc">
             応用情報 午前（＝支援士の午前I）と支援士 午前IIの、令和3年春期〜令和7年秋期の出題テーマから作ったオリジナルの一問一答です。
             問題本文と解説は、各問題のリンク先（<a href="https://www.ap-siken.com/apkakomon.php" target="_blank" rel="noopener noreferrer">応用情報技術者試験ドットコム</a> /
             <a href="https://www.sc-siken.com/sckakomon.php" target="_blank" rel="noopener noreferrer">情報処理安全確保支援士試験ドットコム</a>）で確認できます。
-          </p>
-          <div class="quiz-stats-grid" id="quizStatsGrid"></div>
+          </p></details>
+          <details class="library-details"><summary>試験別の進捗</summary><div class="quiz-stats-grid" id="quizStatsGrid"></div></details>
 
           <div class="quiz-start-form">
             <div>
@@ -430,76 +439,89 @@
           <button class="btn btn-primary" id="btnLibStartQuiz" type="button">▶ 一問一答を始める</button>
         </div>
 
+        </div>
+        <div data-library-section="aws" hidden>
         <div class="card aws-card" id="awsCard">
           <div class="card-title-row">
             <h3 class="card-heading">☁️ AWS 一問一答（基礎AI・基礎・設計 中級・上級）</h3>
             <span class="count-label" id="awsCount"></span>
           </div>
-          <p class="text-desc">
+          <details class="library-details"><summary>教材について</summary><p class="text-desc">
             AWS公式資料（公式ドキュメント・公式サイト）を根拠に作った、日本語のオリジナル問題です（公式問題ではなく、本番試験の形式や合格を保証するものでもありません）。
             問題を見て思い出し、「答えを見る」で正解を確認して、「覚えていた／覚えていない」を自分で判定します。
             <strong>オフライン保存の対象外です。</strong>AWSの問題・復習・弱点の演習には、オンライン接続が必要です。
-          </p>
-          <div class="aws-course-grid" id="awsCourseGrid"><p class="text-muted">読み込み中...</p></div>
+          </p></details>
+          <label class="input-label" for="awsLibraryCourse">コース</label><select class="simple-input" id="awsLibraryCourse" aria-label="AWSコース"></select><div class="aws-course-grid" id="awsCourseGrid"><p class="text-muted">読み込み中...</p></div>
         </div>
 
+        </div>
+        <div data-library-section="gcp" hidden>
         <div class="card aws-card" id="gcpCard">
           <div class="card-title-row">
             <h3 class="card-heading">☁️ GCP 一問一答（基礎AI・基礎・管理 中級・設計 上級）</h3>
             <span class="count-label" id="gcpCount"></span>
           </div>
-          <p class="text-desc">Google Cloudの公開試験ガイドに沿った日本語のオリジナル問題です。公式試験問題ではなく、試験の形式や合格を保証するものではありません。「答えを見る」で確認し、自分で判定します。<strong>オンライン接続が必要です。</strong></p>
-          <div class="aws-course-grid" id="gcpCourseGrid"><p class="text-muted">読み込み中...</p></div>
+          <details class="library-details"><summary>教材について</summary><p class="text-desc">Google Cloudの公開試験ガイドに沿った日本語のオリジナル問題です。公式試験問題ではなく、試験の形式や合格を保証するものではありません。「答えを見る」で確認し、自分で判定します。<strong>オンライン接続が必要です。</strong></p></details>
+          <label class="input-label" for="gcpLibraryCourse">コース</label><select class="simple-input" id="gcpLibraryCourse" aria-label="GCPコース"></select><div class="aws-course-grid" id="gcpCourseGrid"><p class="text-muted">読み込み中...</p></div>
         </div>
 
+        </div>
+        <div data-library-section="info" hidden>
         <div class="card exam-snapshot">
           <div class="card-title-row">
             <h3 class="card-heading">🗓️ 2026年度の試験準備</h3>
             <span class="count-label">IPA確認: 2026-09-26</span>
           </div>
-          <p class="text-desc">情報処理安全確保支援士試験は2026年度からCBT方式です。前期の申込期間は10月6日10:00〜24日17:00、科目A-1・A-2は10月17日〜27日、科目Bは11月11日〜23日です。日時・会場は申込時に選びます。現時点で公開済みの過去問は令和7年度までです。2026年度の試験はこれから実施されるため、過去問演習に加えてCBTの予約や受験方法も公式案内で確認してください。</p>
-          <p class="text-desc">2027年度の新試験制度に向けたサンプル問題も公開されています。過去問演習と区別して、出題形式・範囲の差を確認しましょう。</p>
+          <details class="library-details"><summary>教材について</summary><p class="text-desc">情報処理安全確保支援士試験は2026年度からCBT方式です。前期の申込期間は10月6日10:00〜24日17:00、科目A-1・A-2は10月17日〜27日、科目Bは11月11日〜23日です。日時・会場は申込時に選びます。現時点で公開済みの過去問は令和7年度までです。2026年度の試験はこれから実施されるため、過去問演習に加えてCBTの予約や受験方法も公式案内で確認してください。</p></details>
+          <details class="library-details"><summary>教材について</summary><p class="text-desc">2027年度の新試験制度に向けたサンプル問題も公開されています。過去問演習と区別して、出題形式・範囲の差を確認しましょう。</p></details>
           <div class="exam-snapshot-links">
             <a class="run-link" href="https://www.ipa.go.jp/shiken/mousikomi/moushikomi.html" target="_blank" rel="noopener noreferrer">IPA: 申込期間・CBT実施期間 ↗</a>
             <a class="run-link" href="https://www.ipa.go.jp/shiken/syllabus/henkou/2026/20260622.html" target="_blank" rel="noopener noreferrer">IPA: 新試験制度のサンプル問題 ↗</a>
           </div>
         </div>
 
+        </div>
+        <div data-library-section="stats" hidden>
         <div class="card">
           <div class="card-title-row">
             <h3 class="card-heading">📊 分野別の正答率</h3>
             <button class="btn btn-secondary btn-sm" id="btnWeakQuiz" type="button" hidden>弱点分野を集中演習</button>
           </div>
-          <p class="text-desc">一問一答の結果から、分野ごとの正答率を出しています（5回以上解いた分野だけ判定）。正答率が7割未満の分野は「弱点」として、今日のクエストでも優先されます。</p>
+          <details class="library-details"><summary>教材について</summary><p class="text-desc">一問一答の結果から、分野ごとの正答率を出しています（5回以上解いた分野だけ判定）。正答率が7割未満の分野は「弱点」として、今日のクエストでも優先されます。</p></details>
           <div class="field-stats" id="fieldStatsList"></div>
         </div>
 
-        <div class="card" id="reportCard" hidden>
+        </div>
+        <div data-library-section="reports" hidden>
+        <p id="emptyReports" class="text-muted" hidden>報告した問題はありません。</p><div class="card" id="reportCard" hidden>
           <div class="card-title-row">
             <h3 class="card-heading">⚠ 報告した問題 <span class="count-label" id="reportCount"></span></h3>
             <button class="btn btn-secondary btn-sm" id="btnCopyReports" type="button">まとめてコピー</button>
           </div>
-          <p class="text-desc">「この問題おかしい？」で報告した問題です。「まとめてコピー」で GitHub の Issue や Claude への修正依頼に貼り付けられる形になります。</p>
+          <details class="library-details"><summary>教材について</summary><p class="text-desc">「この問題おかしい？」で報告した問題です。「まとめてコピー」で GitHub の Issue や Claude への修正依頼に貼り付けられる形になります。</p></details>
           <div class="report-list" id="reportList"></div>
         </div>
 
+        </div>
+        <div data-library-section="written" hidden>
         <div class="card">
           <div class="card-title-row">
             <h3 class="card-heading">✍️ 支援士 午後・科目B（記述式）</h3>
             <span class="count-label" id="writtenCount"></span>
           </div>
-          <p class="text-desc">
+          <details class="library-details"><summary>教材について</summary><p class="text-desc">
             令和3年春期〜令和7年秋期の記述式の問題です。問題冊子と解答例は IPA 公式サイトの PDF で読みます（登録は不要です）。
             答案を書いたら、解答例のキーワード照合と、Claude による添削（設定されている場合）で振り返れます。
-          </p>
+          </p></details>
           <div class="pill-group reading-filter" id="writtenFilterPills">
             <button class="pill active" data-val="todo">未着手</button>
             <button class="pill" data-val="all">すべて</button>
             <button class="pill" data-val="done">演習済み</button>
           </div>
-          <div class="reading-list" id="writtenList"></div>
+          <div class="library-page-heading" id="writtenPageStatus" role="status" tabindex="-1"></div><div class="reading-list" id="writtenList"></div><nav class="library-pager" aria-label="記述式問題のページ"><button type="button" class="btn btn-secondary btn-sm" id="writtenPrev">前のページ</button><button type="button" class="btn btn-secondary btn-sm" id="writtenNext">次のページ</button></nav>
         </div>
 
+        </div>
       </section>
 
       <!-- ================= 2. 復習 ================= -->

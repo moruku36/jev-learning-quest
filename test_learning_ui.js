@@ -24,6 +24,31 @@ const {QUIZ_CARDS}=require('./lib/content');
       page.on('request',r=>{if(r.method()==='POST'&&r.url().endsWith('/api/quiz/answers'))quizSaves++;if(r.method()==='POST'&&r.url().endsWith('/api/history'))nwSaves++;});
       await page.goto('http://127.0.0.1:'+server.address().port);
       await page.waitForFunction(()=>STATE.library?.network?.length===300 && !document.getElementById('appShell').hidden);
+      // Compact library: one collection/course, bounded rows and focus after pagination.
+      await page.getByRole('button',{name:'📝 試験問題',exact:true}).click();
+      for (const section of ['aws','gcp','claude','nw','ipa','written']) {
+        await page.locator('#librarySection').selectOption(section);
+        assert.equal(await page.locator('[data-library-section]:visible').count(),1);
+        assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Library has no horizontal overflow');
+        if(width===1280)assert(await page.evaluate(()=>document.querySelector('[data-library-section]:not([hidden])').getBoundingClientRect().bottom<=innerHeight),'Main library controls fit the desktop viewport: '+section);
+      }
+      await page.locator('#librarySection').selectOption('nw');
+      assert.equal(await page.locator('#nwList [data-nw]').count(),2);
+      await page.locator('#nwNext').click();
+      assert.equal(await page.evaluate(()=>document.activeElement.id),'nwPageStatus');
+      assert((await page.locator('#nwPageStatus').textContent()).includes('3–4 / 25'));
+      await page.locator('#nwPart').selectOption('pm2');
+      assert((await page.locator('#nwPageStatus').textContent()).includes('1–2 / 2'));
+      assert.equal(await page.locator('#nwNext').isDisabled(),true);
+      await page.locator('#librarySection').selectOption('claude');
+      await page.locator('#libraryCount').selectOption('100');
+      await page.locator('#btnClaudeStudy').click();
+      await page.waitForFunction(()=>STATE.quiz?.cards.length===100);
+      assert.equal(await page.evaluate(()=>new Set(STATE.quiz.cards.map(c=>c.id)).size),100);
+      await page.locator('#btnQuizReveal').click();
+      assert.equal(await page.locator('#quizAnswerBox').isVisible(),true);
+      await page.locator('#btnQuizQuit').click(); // no judgments, so no stored results
+      await page.evaluate(()=>switchTab('quest'));
       await page.evaluate(()=>startQuizRun({type:'一問一答',category:'sc',title:'UI regression',quiz:{exam:'sc',count:2,format:'choice'},decisionSource:'manual'}));
       // Choice format is a hint only: no clickable choices, no grading, the key appears on reveal.
       assert.equal(await page.locator('#quizChoices button').count(),0);
@@ -228,8 +253,9 @@ const {QUIZ_CARDS}=require('./lib/content');
       assert.equal(awsStored.history.find(h=>h.title==='AWS regression').category,'aws');
       assert.equal(Object.keys(awsStored.quizProgress).filter(id=>id.startsWith('aws-clf-')).length,2);
       await page.evaluate(()=>switchTab('library'));
+      await page.locator('#librarySection').selectOption('aws');
       await page.locator('#awsCourseGrid .aws-course').first().waitFor();
-      assert.equal(await page.locator('#awsCourseGrid .aws-course').count(),4);
+      assert.equal(await page.locator('#awsCourseGrid .aws-course').count(),1);
       assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'No page-wide overflow on the AWS course card');
       await page.evaluate(()=>switchTab('quest'));
       await page.locator('#catPills').getByRole('button',{name:'GCP',exact:true}).click();
@@ -260,8 +286,9 @@ const {QUIZ_CARDS}=require('./lib/content');
       assert.equal(gcpStored.history.find(h=>h.title==='GCP regression').category,'gcp');
       assert.equal(Object.keys(gcpStored.quizProgress).filter(id=>id.startsWith('gcp-gai-')).length,2);
       await page.evaluate(()=>switchTab('library'));
+      await page.locator('#librarySection').selectOption('gcp');
       await page.locator('#gcpCourseGrid .aws-course').first().waitFor();
-      assert.equal(await page.locator('#gcpCourseGrid .aws-course').count(),4);
+      assert.equal(await page.locator('#gcpCourseGrid .aws-course').count(),1);
       assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'No page-wide overflow on the GCP course card');
       await page.evaluate(()=>switchTab('quest'));
       // Real keys: Space/Y/N, held (repeat:true) keys, and Enter on a focused link must not skip or double-judge.
